@@ -12,7 +12,6 @@ from lib.motor_state.moteus_motor_state import MoteusMotorState, MoteusRunSettin
 
 
 class MoteusMotor:
-
     def __init__(self, config: MoteusMotorConfig, ros_node: Node) -> None:
         """
         Create a logical representation of a motor that is using

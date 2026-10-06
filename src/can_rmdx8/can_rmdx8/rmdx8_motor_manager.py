@@ -30,6 +30,7 @@ class RMDx8MotorManager(Node):
         self.get_logger().info(colorStr("Launching can_rmdx8 node", ColorCodes.BLUE_OK))
         self._id_to_rmdx8_motor: dict[int, RMDx8Motor] = {}
         self.driver = rmd.CanDriver("can1")
+        self._driver_lock = Lock()
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
         self.createRMDx8Motors()
@@ -66,6 +67,7 @@ class RMDx8MotorManager(Node):
             self.driver,
             self,
             lambda: self._createRequest(config.can_id, String(data=self._UPDATE_STATE)),
+            self._driver_lock,
         )
         self._id_to_rmdx8_motor[config.can_id] = motor
         self._createSubscriber(config)
@@ -134,7 +136,12 @@ def main(args: list[str] | None = None) -> None:
     finally:
         if node is not None:
             node.shutdownMotors()
-        rclpy.shutdown()
+        # rclpy's own SIGINT handler may have already shut the context down
+        # by the time we get here, so calling shutdown() unconditionally
+        # raises RCLError("rcl_shutdown already called") and makes every
+        # Ctrl-C look like a crash.
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 # If script is run directly, then create a RMDx8MotorManager object and run the main function

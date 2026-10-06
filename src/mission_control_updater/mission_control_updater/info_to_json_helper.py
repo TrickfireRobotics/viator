@@ -4,7 +4,6 @@ from lib.motor_state.moteus_motor_state import MoteusMotorState
 
 
 class InfoToJSONHelper:
-
     def __init__(self) -> None:
         self.moteus_entries: list[MoteusMotorState] = []
 

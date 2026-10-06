@@ -1,0 +1,87 @@
+---
+title: Architecture
+description: Repo layout and what each ROS 2 package does.
+slug: architecture
+---
+
+## Repo layout
+
+```
+urc-2023/
+├── src/                  # ROS 2 workspace (colcon)
+│   ├── arm/              # Arm control node
+│   ├── camera/           # Camera streaming node
+│   ├── can_moteus/       # Moteus motor controller driver
+│   ├── can_rmdx8/        # RMD-X8 motor controller driver
+│   ├── custom_interfaces/# Shared .srv/.msg definitions
+│   ├── drivebase/        # Drivebase (wheel) control node
+│   ├── heartbeat/        # Connection watchdog / e-stop
+│   ├── lib/               # Shared Python library (not a standalone node)
+│   ├── mission_control_updater/ # Publishes robot state to mission control
+│   ├── viator_launch/    # Top-level launch file
+│   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
+├── scripts/              # Build/launch/deploy shell scripts (see Makefile)
+├── .devcontainer/        # Dockerfile + bashrc for the dev container
+└── Makefile              # `make build` / `make launch` / etc.
+```
+
+`src/` is a standard ROS 2 (`colcon`) workspace. Every package here is `ament_python` except `custom_interfaces`, which is `ament_cmake` (it only generates message/service headers via `rosidl_generate_interfaces`, no compiled node code).
+
+## `lib/` — shared library
+
+Not a ROS node itself; every node package imports from here.
+
+| File                                     | Purpose                                                                                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lib/configs.py`                          | Static motor configuration (CAN IDs, motor type, gear ratios) shared across the whole robot.                                                                 |
+| `lib/interface/robot_interface.py`        | `RobotInterface` — the utility class nodes use to command motors (converts between physical units and raw motor commands, publishes over the CAN bridges).  |
+| `lib/interface/robot_info.py`             | `RobotInfo` — the read-side counterpart: subscribes to motor state topics and exposes the current state of every motor on the robot.                        |
+| `lib/motor_state/`                        | Typed state objects for each motor backend (`CANMotorState`, `MoteusMotorState`, `RMDX8MotorState`).                                                         |
+| `lib/color_codes.py`, `lib/json_msg.py`   | Small logging/serialization helpers.                                                                                                                         |
+
+## Motor drivers
+
+Two independent CAN motor controller backends, both bridging to the shared `lib/motor_state` types:
+
+<Cards>
+    <Card
+        title="can_moteus"
+        description="Drives mjbots moteus controllers over a CANFD-USB adapter."
+    >
+        [mjbots moteus](https://github.com/mjbots/moteus) · `ros_moteus_bridge.py`,
+        `moteus_thread_manager.py`, `moteus_motor.py`
+    </Card>
+    <Card
+        title="can_rmdx8"
+        description="Drives MyActuator RMD-X8 controllers, exposed to Python via pybind11."
+    >
+        [myactuator_rmd](https://github.com/2b-t/myactuator_rmd) · `rmdx8_motor_manager.py`,
+        `rmdx8_motor.py` (built from source in the Dockerfile)
+    </Card>
+</Cards>
+
+## Robot-facing nodes
+
+| Node                      | Description                                                                                                                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drivebase`                | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`.                                                                                        |
+| `arm`                       | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
+| `camera`                    | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`.                                       |
+| `heartbeat`                 | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop.                                                              |
+| `mission_control_updater`   | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
+
+## `custom_interfaces`
+
+Shared ROS interface definitions used across packages, e.g. `srv/ArmMode.srv` (switches the arm's control mode: disabled / individual motor velocity / individual motor position / inverse kinematics).
+
+## `viator_launch`
+
+`launch/robot.launch.py` is the single entry point that starts every node above together — this is what `make launch` runs (`ros2 launch viator_launch robot.launch.py`).
+
+<Callout type="info">
+    See [Launching the Rover](./launching.mdx) for the full build → CAN setup → launch workflow.
+</Callout>
+
+## `vision_opencv`
+
+A git submodule pointing at [ros-perception/vision_opencv](https://github.com/ros-perception/vision_opencv) (`ros2` branch), providing `cv_bridge` for OpenCV/ROS image conversion. It's excluded from this repo's own lint/format tooling since it isn't our code.

@@ -13,7 +13,6 @@ from . import info_to_json_helper
 
 
 class MissionControlUpdater(Node):
-
     def __init__(self) -> None:
         super().__init__("mission_control_updater_node")
         self.get_logger().info(

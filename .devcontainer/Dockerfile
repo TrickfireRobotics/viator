@@ -1,73 +1,68 @@
-# Base image: Ubuntu 20.04 with ROS2 Humble installed
-FROM ros:humble
+# Ubuntu 22.04 with ROS 2 Humble
+FROM ros:humble AS viator
 
-# Install dependencies from apt
-RUN apt-get update 
-RUN apt-get install -y \
-  # To use git in the container
-  git \
-  # pip is a package manager for Python
-  python3-pip \
-  # To let us sync with GitHub over SSH
-  ssh-client \
-  ros-humble-rosbridge-server
+# ---- system packages ----
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install --no-install-recommends -y \
+    git \
+    python3-pip \
+    ssh-client \
+    ros-humble-rosbridge-server \
+    usbutils \
+    can-utils \
+    iproute2 \
+    kmod \
+    # cv_bridge
+    python3-numpy \
+    libboost-python-dev \
+    libopencv-dev \
+    python3-opencv
 
-RUN apt-get install -y \
-  # Install usb utilities
-  usbutils \ 
-  can-utils \
-  iproute2 \
-  kmod
+RUN pip3 install --no-cache-dir \
+    moteus \
+    pyusb \
+    pybind11 \
+    pybind11-stubgen \
+    "pydocstyle>=6.3.0"
 
-RUN apt-get install -y \
-  # Used for cv_bridge
-  python3-numpy \
-  libboost-python-dev
+# ---- dev tooling ----
 
-RUN apt-get install -y \
-  # OpenCV
-  libopencv-dev \
-  python3-opencv
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y nodejs
 
-# Clean out the apt lists after `apt-get update`
-RUN rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir ruff mypy pre-commit \
+    && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
+    -o /usr/local/bin/shfmt \
+    && chmod +x /usr/local/bin/shfmt
 
-#Install moteus python library https://github.com/mjbots/moteus/tree/main/lib/python
-RUN pip3 install moteus
+# ---- myactuator_rmd (RMD-X8 motor driver) ----
 
-RUN pip3 install pyusb
+RUN git clone --depth 1 https://github.com/2b-t/myactuator_rmd.git /tmp/myactuator_rmd \
+    && cmake -S /tmp/myactuator_rmd -B /tmp/myactuator_rmd/build -D PYTHON_BINDINGS=on \
+    && cmake --build /tmp/myactuator_rmd/build -j "$(nproc)" \
+    && cmake --install /tmp/myactuator_rmd/build \
+    && ldconfig \
+    && pip3 install /tmp/myactuator_rmd \
+    && pybind11-stubgen myactuator_rmd_py -o /usr/local/lib/python3.10/dist-packages \
+    && rm -rf /tmp/myactuator_rmd
 
-# Pybind build capability for the RMD lib
-RUN pip3 install pybind11
-RUN pip3 install pybind11-stubgen
+# ---- user ----
+RUN useradd trickfire --shell /bin/bash --create-home --no-log-init -G video,sudo,dialout,plugdev \
+    && echo "trickfire:trickfire" | chpasswd \
+    && touch /home/trickfire/.sudo_as_admin_successful \
+    && chown trickfire:trickfire /home/trickfire/.sudo_as_admin_successful
 
-# Update pydocstyle to remove a deprecation warning when testing for PEP257
-RUN pip install --upgrade pydocstyle
+# trickfire is non-root, but SocketCAN raw sockets (candump/cansend and the RMD-X8
+# node's CanDriver) need CAP_NET_RAW/CAP_NET_ADMIN, which a non-root exec doesn't get
+# just from the container's `cap_add`/`privileged` settings. Grant NOPASSWD sudo for
+# only the specific CAN tooling and the built can_rmdx8 node so this works without an
+# interactive password, without handing trickfire unrestricted root.
+COPY .devcontainer/trickfire-can-sudoers /etc/sudoers.d/trickfire-can
+RUN chmod 0440 /etc/sudoers.d/trickfire-can && visudo -cf /etc/sudoers.d/trickfire-can
 
-# Add the RMD lib
-RUN git clone https://github.com/2b-t/myactuator_rmd.git \
-  && cd myactuator_rmd \
-  # Build instructions taken from the github repo
-  && mkdir build \
-  && cd build \
-  && cmake .. -D PYTHON_BINDINGS=on \
-  && make -j $(nproc) \
-  && sudo make install \
-  # Install python bindings
-  && pip3 install ../
-
-RUN pybind11-stubgen myactuator_rmd_py -o /usr/local/lib/python3.10/dist-packages
-
-# Add a user so we can remote into this container with a non-root user
-RUN useradd trickfire \
-  # Bash will be its default shell
-  --shell /bin/bash \
-  # Give it a directory in /home
-  --create-home \
-  # Don't make a giant log file for login data, we don't care about it
-  --no-log-init \
-  # Allow the user to access video cameras.
-  -G video
-
-# Copy all the bash customizations over to the user.
 COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
+
+USER trickfire

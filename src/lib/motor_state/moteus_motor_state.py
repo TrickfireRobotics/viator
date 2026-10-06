@@ -23,7 +23,7 @@ class MoteusMotorState(CANMotorState["MoteusMotorState"]):
     """
     velocity: float | None = None
     """
-    Current velocity of the motor in revolutions per second. 
+    Current velocity of the motor in revolutions per second.
     """
     torque: float | None = None
     """

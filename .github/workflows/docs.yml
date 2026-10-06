@@ -1,0 +1,14 @@
+name: Sync Docs
+
+on:
+    push:
+        branches: [main]
+        paths:
+            - "docs/**"
+            - "docs.config.json"
+    workflow_dispatch:
+
+jobs:
+    sync:
+        uses: TrickfireRobotics/docs/.github/workflows/sync-docs.yml@main
+        secrets: inherit

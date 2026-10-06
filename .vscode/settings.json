@@ -1,8 +1,45 @@
 {
+    "editor.rulers": [100],
+    "files.associations": {
+        "*.tcc": "cpp"
+    },
+    "files.exclude": {
+        "**/.mypy_cache": true,
+        "**/.ruff_cache": true
+    },
+
+    /* ------------------------------- formatting ------------------------------- */
+
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        }
+    },
+    "shfmt.executablePath": "/usr/local/bin/shfmt",
+    "[shellscript]": {
+        "editor.defaultFormatter": "mkhl.shfmt",
+        "editor.formatOnSave": true
+    },
+    "[mdx]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+    "[json]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.formatOnSave": true
+    },
+
+    /* --------------------------------- python --------------------------------- */
+
     "python.autoComplete.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "./src",
-        // Add type checking to srv files and msg files
         "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
     "python.analysis.extraPaths": [
@@ -10,31 +47,24 @@
         "./src",
         "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
+
     "python.analysis.diagnosticSeverityOverrides": {
         "reportMissingModuleSource": "none"
     },
+
     "python.analysis.exclude": [
         "./build",
         "./install",
-        "./log"
+        "./log",
+        "**/node_modules",
+        "**/__pycache__",
+        "**/.*"
     ],
+
     "python.defaultInterpreterPath": "python3",
-    "pylint.args": [
-        "--rcfile=.pylintrc"
-    ],
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "explicit"
-    },
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
-        "editor.formatOnSave": true
-    },
+
+    /* ----------------------------------- cpp ---------------------------------- */
+
     "cmake.configureOnOpen": false,
-    "cmake.sourceDirectory": "${workspaceFolder}/src/hello_world",
-    "files.associations": {
-        "*.tcc": "cpp"
-    },
-    "editor.rulers": [
-        100
-    ]
+    "cmake.sourceDirectory": "${workspaceFolder}/src/hello_world"
 }

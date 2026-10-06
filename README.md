@@ -1,20 +1,12 @@
-# Trickfire Robotics University Rover Challenge Software
-Software developed by [Trickfire Robotics](https://www.trickfirerobotics.org/) for the Mars Society's [University Rover Challenge](https://urc.marssociety.org/), written for [ROS2](https://design.ros2.org/articles/why_ros2.html).
+# Viator
 
-We develop using [Docker](https://en.wikipedia.org/wiki/Docker_(software)) and [Visual Studio Code](https://code.visualstudio.com/). Docker containers keep the development environment well-defined and repeatable: no more mysterious missing dependencies. 
+Software developed by [Trickfire Robotics](https://www.trickfirerobotics.org/) for the Viator Rover built for the [University Rover Challenge](https://urc.marssociety.org/), using [ROS2 Humble](https://docs.ros.org/en/humble/index.html).
 
-## `Getting Started`
-Refer to our [Notion wiki](https://www.notion.so/trickfire/Getting-Started-With-Viator-Rover-1491fd41ff5b801485e0f6ad57e0a0aa) for more information.
+## Documentation
 
+**Full documentation is at [docs.trickfirerobotics.com/simulations](https://docs.trickfirerobotics.com/simulations).** See also our
+[Notion wiki](https://www.notion.so/trickfire/Getting-Started-With-Viator-Rover-1491fd41ff5b801485e0f6ad57e0a0aa).
 
-## `Quick Reference (VS Code)`
-Open/close the terminal in VS Code with `` Ctrl + ` `` (backtick `` ` `` is on the same key as tilde `~`).
-
-| Action             | Terminal command | VS Code shortcut                          |
-| ------------------ | ---------------- | ----------------------------------------- |
-| Build all packages | `./build.sh`     | `Ctrl+Shift+B`                            |
-| Launch nodes       | `./launch.sh`    |                                           |
-| Connect to Docker Container | `./connect_to_container.sh` |
-| Restart to Docker Container | `./container_launch.sh` |
-
-Where available, use the VS Code shortcuts because they come with in-editor features such as problem matchers.
+- [Getting Started](http://docs.trickfirerobotics.com/urc-2023/getting-started) - dev environment setup
+- [Architecture](http://docs.trickfirerobotics.com/urc-2023/architecture) - architecture decisions/explanations
+- [Rover Launch](http://docs.trickfirerobotics.com/urc-2023/launching) - how to launch Viator

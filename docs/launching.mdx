@@ -1,0 +1,118 @@
+---
+title: Launching the Rover
+description: Build, bring up CAN, and launch the full node graph.
+---
+
+This walks through the full workflow for getting Viator's software running end to end: starting mission control on your own machine, connecting to the rover, bringing up the CAN bus, and launching the ROS 2 node graph. It assumes you've already done the one-time dev container setup from [Getting Started](./getting-started.mdx).
+
+## Start mission control
+
+Mission control lives in its own repo, separate from `urc-2023`.
+
+<Steps>
+    <Step>
+        If you don't already have it, clone
+        [mission-control](https://github.com/TrickfireRobotics/mission-control) and install its
+        dependencies:
+
+        ```bash title="Terminal"
+        git clone https://github.com/TrickfireRobotics/mission-control.git
+        cd mission-control
+        npm install
+        ```
+    </Step>
+    <Step>
+        Start it:
+
+        ```bash title="Terminal"
+        npm run dev
+        ```
+    </Step>
+    <Step>
+        Once it's open, go to the settings tab and point the websocket at the rover's address
+        (the same one you'll SSH into below). The connection indicator turns green once the
+        rover's `rosbridge_server` is up and reachable.
+    </Step>
+
+</Steps>
+
+<Callout type="info" title="Run this on your own machine">
+    Mission control is a plain Node/Vite project - run it on your host, not inside the `urc-2023`
+    dev container.
+</Callout>
+
+## Connect to the rover
+
+```bash title="Terminal"
+ssh trickfire@192.168.0.112
+cd ~/urc-2023
+```
+
+## Bring up the CAN bus
+
+Open a second terminal on the rover (SSH in again) and start watching the bus before you bring it up, so you can see traffic appear as soon as it's live:
+
+```bash title="Terminal 2"
+candump any
+```
+
+<Callout type="info">
+    Using `any` instead of a specific interface name means this keeps working no matter which CAN
+    line (`can0`, `can1`, ...) ends up carrying traffic. Leave it running; it'll pick up traffic as
+    soon as the interface comes up in the next step.
+</Callout>
+
+Back in the first terminal, bring the CAN interface up:
+
+```bash title="Terminal 1"
+make can-setup
+```
+
+This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
+
+## Build and launch
+
+<Steps>
+    <Step>
+        Build and attach to the rover's container:
+
+        ```bash title="Terminal 1"
+        make container
+        ```
+    </Step>
+    <Step>
+        Inside the container, build the ROS 2 workspace:
+
+        ```bash title="Terminal 1 (in container)"
+        make build
+        ```
+    </Step>
+    <Step>
+        Launch the full node graph:
+
+        ```bash title="Terminal 1 (in container)"
+        make launch
+        ```
+    </Step>
+
+</Steps>
+
+<Callout type="success" title="It's working">
+    `candump` should now show a steady stream of CAN traffic, and mission control's websocket
+    indicator should be green - the full chain from rover hardware to mission control is live.
+</Callout>
+
+<Callout type="idea" title="Reconnecting later">
+    Once the container exists, `make connect` re-attaches to it without rebuilding - use that
+    instead of `make container` for subsequent sessions.
+</Callout>
+
+<Accordions>
+    <Accordion title="candump shows no traffic">
+        The CAN interface hasn't been brought up yet - run `make can-setup` first.
+    </Accordion>
+    <Accordion title="Mission control's websocket indicator stays red">
+        Double check the websocket address in mission control's settings matches the rover's current
+        IP, and that `make launch` is actually running (it's what starts `rosbridge_server`).
+    </Accordion>
+</Accordions>

@@ -58,7 +58,7 @@ class RMDX8RunSettings(CanMotorRunSettings["RMDX8RunSettings"]):
 
     current_pi: PiGains | None = None
     """
-    The PID values for the current/amperage of the motor 
+    The PID values for the current/amperage of the motor
     """
     speed_pi: PiGains | None = None
     position_pi: PiGains | None = None

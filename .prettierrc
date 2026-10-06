@@ -1,0 +1,13 @@
+{
+    "tabWidth": 4,
+    "trailingComma": "none",
+    "printWidth": 100,
+    "overrides": [
+        {
+            "files": "*.mdx",
+            "options": {
+                "proseWrap": "never"
+            }
+        }
+    ]
+}

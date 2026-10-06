@@ -1,0 +1,30 @@
+services:
+    viator:
+        build:
+            context: ..
+            dockerfile: .devcontainer/Dockerfile
+            target: viator
+        image: urc-2023:latest
+        container_name: viator
+        user: trickfire
+
+        volumes:
+            - ..:/home/trickfire/urc-2023
+            # - /dev/video0:/dev/video0
+            - type: bind
+              source: ${HOME}/.ssh
+              target: /home/trickfire/.ssh
+              read_only: true
+              bind:
+                  create_host_path: true
+
+        working_dir: /home/trickfire/urc-2023
+
+        network_mode: host
+
+        privileged: true
+        security_opt:
+            - seccomp:unconfined
+
+        stdin_open: true
+        tty: true

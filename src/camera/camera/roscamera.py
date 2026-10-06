@@ -20,7 +20,7 @@ def getCameras() -> list[int]:
         if not camera.isOpened():
             non_working_ports += 1
         else:
-            is_reading, img = camera.read()
+            is_reading, _img = camera.read()
             _ = camera.get(3)
             _ = camera.get(4)
             if is_reading:
@@ -32,7 +32,6 @@ def getCameras() -> list[int]:
 
 
 class RosCamera(Node):
-
     def __init__(self, topicName: str, camera: int):
         super().__init__("ros_camera")
         self.get_logger().info("Launching ros_camera node")

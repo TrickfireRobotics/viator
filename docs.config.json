@@ -1,0 +1,12 @@
+{
+    "$schema": "https://docs.trickfirerobotics.com/docs.config.schema.json",
+    "name": "Viator",
+    "description": "Viator rover software for the University Rover Challenge (ROS 2 Humble)",
+    "icon": "Bot",
+    "sidebar": [
+        { "label": "Getting Started", "slug": "getting-started" },
+        { "label": "Architecture", "slug": "architecture" },
+        { "label": "Launching the Rover", "slug": "launching" },
+        { "label": "Viator Orin", "slug": "orin" }
+    ]
+}

@@ -45,14 +45,13 @@ class RMDx8Motor:
         config: RMDx8MotorConfig,
         driver: rmd.CanDriver,
         ros_node: Node,
-        # The callback we pass to it in the motor manager
         cb: Callable[[], None],
+        driver_lock: Lock,
     ) -> None:
         self.config = config
         self._ros_node = ros_node
         self.motor = rmd.ActuatorInterface(driver, config.can_id)
-        self.mutex_lock = Lock()
-        # This callback group tells the thread pool that we can run these callbacks in parallel
+        self.mutex_lock = driver_lock
         self._callback_group = ReentrantCallbackGroup()
         self._publisher = self._createPublisher()
         self._poll_count = 0
@@ -139,11 +138,24 @@ class RMDx8Motor:
                     )
         except myactuator_rmd_py.can.ControllerProblemError as e:
             self._ros_node.get_logger().error(
-                f"Controller fault on motor {self.config.can_id}: {e}"
+                f"Controller fault on motor {self.config.can_id}: {e}",
+                throttle_duration_sec=1.0,
             )
         except myactuator_rmd_py.can.SocketException as e:
             self._ros_node.get_logger().error(
-                f"CAN error in dataInCallback for motor {self.config.can_id}: {e}"
+                f"CAN error in dataInCallback for motor {self.config.can_id}: {e}",
+                throttle_duration_sec=1.0,
+            )
+        except Exception as e:
+            # The driver's exceptions aren't all under one base class, so a bus
+            # glitch here must never be allowed to kill the whole node. Include
+            # the exception's type since the driver doesn't give these a common
+            # base class to catch, and knowing the type is what lets us add a
+            # proper except clause for it later instead of it hiding here.
+            self._ros_node.get_logger().error(
+                f"Unexpected error in dataInCallback for motor {self.config.can_id}: "
+                f"{type(e).__name__}: {e}",
+                throttle_duration_sec=1.0,
             )
 
     def publishData(self) -> None:
@@ -168,24 +180,39 @@ class RMDx8Motor:
             self._publisher.publish(state.toMsg())
         except myactuator_rmd_py.can.ControllerProblemError as e:
             self._ros_node.get_logger().error(
-                f"Controller fault on motor {self.config.can_id}: {e}"
+                f"Controller fault on motor {self.config.can_id}: {e}",
+                throttle_duration_sec=1.0,
             )
         except myactuator_rmd_py.can.SocketException as e:
             if "Resource temporarily unavailable" in str(e):
                 self._ros_node.get_logger().warning(
-                    f"Packet dropped from motor {self.config.can_id}, will retry next tick"
+                    f"Packet dropped from motor {self.config.can_id}, will retry next tick",
+                    throttle_duration_sec=1.0,
                 )
             else:
                 self._ros_node.get_logger().error(
-                    f"CAN error in publishData for motor {self.config.can_id}: {e}"
+                    f"CAN error in publishData for motor {self.config.can_id}: {e}",
+                    throttle_duration_sec=1.0,
                 )
+        except Exception as e:
+            self._ros_node.get_logger().error(
+                f"Unexpected error in publishData for motor {self.config.can_id}: "
+                f"{type(e).__name__}: {e}",
+                throttle_duration_sec=1.0,
+            )
 
     def stopMotor(self) -> None:
         """
         Calls my_actuator_rmd stopMotor
         """
-        with self.mutex_lock:
-            self.motor.stopMotor()
+        try:
+            with self.mutex_lock:
+                self.motor.stopMotor()
+        except Exception as e:
+            self._ros_node.get_logger().error(
+                f"Unexpected error in stopMotor for motor {self.config.can_id}: "
+                f"{type(e).__name__}: {e}"
+            )
 
     def shutdownMotor(self) -> None:
         """
@@ -197,4 +224,9 @@ class RMDx8Motor:
         except myactuator_rmd_py.can.SocketException as e:
             self._ros_node.get_logger().error(
                 f"CAN error during shutdown for motor {self.config.can_id}: {e}"
+            )
+        except Exception as e:
+            self._ros_node.get_logger().error(
+                f"Unexpected error during shutdown for motor {self.config.can_id}: "
+                f"{type(e).__name__}: {e}"
             )

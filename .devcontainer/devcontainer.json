@@ -1,31 +1,19 @@
 {
-    "context": "../",
-    "dockerFile": "Dockerfile",
-    "containerUser": "trickfire",
-    "remoteUser": "trickfire",
-    "workspaceMount": "source=${localWorkspaceFolder},target=/home/trickfire/${localWorkspaceFolderBasename},type=bind",
-    "workspaceFolder": "/home/trickfire/${localWorkspaceFolderBasename}",
-    "runArgs": [
-        "--cap-add=SYS_PTRACE",
-        // "--device=/dev/video0",
-        "--security-opt", "seccomp=unconfined"
-    ],
+    "dockerComposeFile": "docker-compose.yml",
+    "service": "viator",
+    "workspaceFolder": "/home/trickfire/urc-2023",
+    "postCreateCommand": "pre-commit install",
     "customizations": {
         "vscode": {
             "extensions": [
                 "ms-python.python",
                 "ms-python.vscode-pylance",
-                "ms-python.pylint",
                 "ms-python.mypy-type-checker",
-                "ms-python.isort",
-                "ms-python.black-formatter"
+                "charliermarsh.ruff",
+                "mkhl.shfmt",
+                "esbenp.prettier-vscode",
+                "unifiedjs.vscode-mdx"
             ]
-        },
-        "settings": {
-        "python.analysis.extraPaths": [
-          "/opt/ros/humble/lib/python3.10/site-packages"
-        ]
-        } 
+        }
     }
-    
 }
