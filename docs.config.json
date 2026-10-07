@@ -7,6 +7,7 @@
         { "label": "Getting Started", "slug": "getting-started" },
         { "label": "Architecture", "slug": "architecture" },
         { "label": "Launching the Rover", "slug": "launching" },
+        { "label": "Deploying to the Rover", "slug": "deployment" },
         { "label": "Viator Orin", "slug": "orin" }
     ]
 }

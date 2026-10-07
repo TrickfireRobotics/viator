@@ -1,0 +1,156 @@
+---
+title: Deploying to the Rover
+description: Build the self-contained runtime image, move it to the Orin offline, and bring it up with systemd.
+slug: deployment
+---
+
+This page covers getting Viator onto the rover as a single self-contained artifact. It is the competition path: build once, verify, carry the result on a USB stick, and run it with no network, no registry, and nothing compiling on the Orin.
+
+The [dev container](./getting-started.mdx) and the [launch workflow](./launching.mdx) are still how you develop day to day. This is about the thing you deploy.
+
+## Why an image rather than the source
+
+The rover used to be deployed by syncing the repo to the Orin and running `make container`, which built the Docker image **on the rover, at deploy time**. That build reaches out to apt mirrors, PyPI, nodesource, and GitHub, and compiles the RMD-X8 driver from source. In the lab that's slow. In the Utah desert with no signal it doesn't work at all, and even with signal the image you build in the field is not the image you tested.
+
+The `runtime` target solves this by baking the compiled workspace into the image:
+
+|                        | Dev container                 | Runtime image                        |
+| ---------------------- | ----------------------------- | ------------------------------------ |
+| Source                 | bind-mounted from the host    | copied in and compiled at build time |
+| Build type             | `Debug`, `--symlink-install`  | `Release`, `--merge-install`         |
+| Toolchain              | ruff, mypy, node, shfmt       | none                                 |
+| Needs network to start | yes, if the image isn't built | no                                   |
+| Workspace location     | `~/viator`                    | `/opt/viator`                        |
+
+The image carries everything. Once it exists, deploying is a file copy.
+
+## Build the image
+
+Run this on the Orin, or on any other arm64 machine. It takes a while the first time, mostly compiling the motor driver.
+
+```bash title="Terminal (on the Orin)"
+make runtime
+```
+
+That produces two tags: `viator:runtime`, which the compose file references, and `viator:<commit>`, so any image can be traced back to the source it came from.
+
+<Callout type="warning" title="Architecture has to match">
+    The Orin is `arm64`. An image built on an `x86_64` laptop will not run on it. Build on the Orin
+    itself, or on another arm64 machine, unless you are deliberately cross-building with `docker
+    buildx --platform linux/arm64`.
+</Callout>
+
+## Move it to the rover offline
+
+`make runtime` leaves the image in the local Docker daemon. To carry it somewhere, write it to a tarball:
+
+<Steps>
+    <Step>
+        On the machine that built it, write the archive:
+
+        ```bash title="Terminal"
+        make save
+        ```
+
+        This writes `dist/viator-runtime-<commit>.tar.zst`.
+    </Step>
+    <Step>Copy that file to a USB stick.</Step>
+    <Step>
+        On the Orin, load it:
+
+        ```bash title="Terminal (on the Orin)"
+        make load ARCHIVE=/media/usb/viator-runtime-abc1234.tar.zst
+        ```
+    </Step>
+
+</Steps>
+
+<Callout type="idea" title="Keep two versions on the stick">
+    Keep the last known-good archive alongside the current one. Rolling back then costs one `make
+    load` instead of a rebuild you can't do without network.
+</Callout>
+
+## Install the systemd units
+
+This copies the compose file, the CAN setup script, and the preflight check into `/opt/viator-deploy`, and installs two units.
+
+```bash title="Terminal (on the Orin)"
+make deploy
+```
+
+| Unit | Enabled on boot | What it does |
+| --- | --- | --- |
+| `viator-can.service` | yes | Loads the CAN kernel modules, brings `can1` up at 1 Mbit, puts the drivebase controllers into speed mode |
+| `viator.service` | **no** | Starts the rover's node graph in the runtime container |
+
+CAN bringup is enabled because it only configures the interface. It does not command motion.
+
+<Callout type="warning" title="viator.service is deliberately left disabled">
+    Enabling it means the rover comes up drive-capable on every power cycle. That is what you want
+    in the field and the last thing you want on a bench with someone's hands in the chassis. Start
+    it by hand with `sudo systemctl start viator`, and only run `sudo systemctl enable viator` once
+    you have decided you want that behaviour.
+</Callout>
+
+## Run it
+
+```bash title="Terminal (on the Orin)"
+sudo systemctl start viator-can     # CAN up (already automatic on boot)
+sudo systemctl start viator         # node graph up
+```
+
+Restarts are Docker's job rather than systemd's, so the two don't fight. The launch file restarts individual non-critical nodes itself, and shuts the whole graph down if a node that commands motors dies, which stops the motors. When that happens the container exits and Docker brings it back, with its own backoff so a persistent fault doesn't become a hot restart loop.
+
+Watch what it's doing:
+
+```bash title="Terminal (on the Orin)"
+docker logs -f viator-rover            # the node graph
+make tui                               # the dashboard, see Launching
+ls /var/log/viator                      # ROS's own log files, kept on the host
+```
+
+## Check it's actually ready
+
+Run this at the start of each competition day and before each run. It is the difference between finding a loose CAN connector now and finding it halfway through a scored run.
+
+```bash title="Terminal (on the Orin)"
+make preflight
+```
+
+```text
+viator preflight
+
+  [ ok ] runtime image          viator:runtime, viator:abc1234
+  [ ok ] container              viator-rover running
+  [ ok ] can1                   up at 1000000 bit/s
+  [ ok ] motors                 all 6 responding
+  [ ok ] cameras                2 video device(s): /dev/video0 /dev/video1
+  [ ok ] rosbridge              listening on 9090
+  [ ok ] disk                   42103 MB free on /var/log
+
+  ready - 7 checks passed
+```
+
+It exits non-zero if anything fails, so you can gate a startup script on it.
+
+<Accordions>
+    <Accordion title="motors: only some responding">
+        The listed CAN IDs aren't answering on the bus. Almost always a connector: check the harness
+        at the Orin's expansion header (see [Viator Orin](./orin.mdx)) and at each controller. If
+        none are responding, confirm `viator-can.service` ran.
+    </Accordion>
+    <Accordion title="runtime image: not loaded">
+        The image isn't in the local Docker daemon. Either `make runtime` to build it or `make load
+        ARCHIVE=...` to load it from the USB stick.
+    </Accordion>
+    <Accordion title="rosbridge: nothing listening on 9090">
+        The node graph isn't running, or it crashed during startup. Check `docker logs viator-rover`
+        and look at the status summary the supervisor prints.
+    </Accordion>
+    <Accordion title="Clone the whole disk as a backup">
+        Once the Orin is set up and working, image the NVMe to an external drive. A corrupted
+        filesystem or dead eMMC then costs a twenty minute restore instead of a day of reflashing
+        JetPack and rediscovering every manual tweak. This is independent of everything above and it
+        is the cheapest insurance on the list.
+    </Accordion>
+</Accordions>

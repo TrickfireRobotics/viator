@@ -5,6 +5,8 @@ description: Build, bring up CAN, and launch the full node graph.
 
 This walks through the full workflow for getting Viator's software running end to end: starting mission control on your own machine, connecting to the rover, bringing up the CAN bus, and launching the ROS 2 node graph. It assumes you've already done the one-time dev container setup from [Getting Started](./getting-started.mdx).
 
+This is the development workflow, where you build from source on the rover. For competition, build the self-contained image instead and deploy that; see [Deploying to the Rover](./deployment.mdx).
+
 ## Start mission control
 
 Mission control lives in its own repo, separate from `viator`.
@@ -97,9 +99,62 @@ This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 
 
 </Steps>
 
+## Confirm it came up
+
+Rather than reading the whole launch log and knowing which lines matter, look at the summary the `supervisor` node prints once every module has checked in:
+
+```text
+[INFO] [supervisor]: viator status
+  drivebase                ok         awaiting commands
+  can_rmdx8                ok         6 motors on can1
+  mission_control_updater  ok
+  arm                      ok         mode disabled
+  heartbeat                ok         awaiting mission control
+  camera                   ok         2 cameras: [0, 1]
+  rosbridge                ok         discovered
+  rosapi                   ok         discovered
+  all modules ready
+```
+
+After that it only speaks up when something changes state, so a quiet log means a healthy rover.
+
+Each module reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. `Launching <node>` is printed at the top of a constructor and tells you nothing about whether the node works.
+
 <Callout type="success" title="It's working">
     `candump` should now show a steady stream of CAN traffic, and mission control's websocket
     indicator should be green - the full chain from rover hardware to mission control is live.
+</Callout>
+
+## Watch it with the dashboard
+
+`make launch` prints to the terminal it's running in. For a readable live view, open the dashboard in a second terminal:
+
+```bash title="Terminal 2 (in container)"
+make tui
+```
+
+Module status sits on top, the log underneath, filtered and rate-aware.
+
+| Key | Does                                                     |
+| --- | -------------------------------------------------------- |
+| `p` | Pause the log. You cannot read a log that is moving      |
+| `f` | Cycle the minimum severity shown                         |
+| `/` | Filter by text                                           |
+| `c` | Copy the visible log to your clipboard                   |
+| `s` | Save the visible log to a file under `~/.ros/viator-tui` |
+| `q` | Quit                                                     |
+
+The dashboard only observes. It attaches to a rover that is already running, so opening and closing it never affects the rover, and losing your SSH session can't take the node graph down with it.
+
+<Callout type="info" title="Copy works over SSH">
+    `c` copies to the clipboard of the machine you are sitting at, not the rover's, using OSC 52. If
+    you are inside tmux it needs `set -g set-clipboard on` to pass the sequence through.
+</Callout>
+
+<Callout type="idea" title="Logs that never reach the dashboard">
+    The dashboard reads `/rosout`, so it shows anything logged through ROS. Output that bypasses ROS
+    entirely - a Python traceback, or OpenCV's own C++ warnings - only appears on the terminal
+    running `make launch`, or in the journal on a deployed rover.
 </Callout>
 
 <Callout type="idea" title="Reconnecting later">
@@ -114,5 +169,20 @@ This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 
     <Accordion title="Mission control's websocket indicator stays red">
         Double check the websocket address in mission control's settings matches the rover's current
         IP, and that `make launch` is actually running (it's what starts `rosbridge_server`).
+    </Accordion>
+    <Accordion title="A module shows as degraded or stale">
+        `degraded` means the node is running but something is wrong, and the detail column says
+        what. `stale` means it stopped reporting altogether, which means it died or hung - check the
+        log for what it said last.
+    </Accordion>
+    <Accordion title="can_rmdx8 reports dropped packets">
+        It reports an aggregate every 5 seconds, like `CAN degraded: 284/584 polls dropped in 5.0s
+        (m21:48 m22:47 m23:50 ...)`. Spread evenly across all six motors points at the bus or the
+        driver; concentrated on one motor points at that motor's wiring.
+    </Accordion>
+    <Accordion title="The whole graph shut down on its own">
+        A node that commands motors exited, and the launch file deliberately takes everything down
+        when that happens so the motors stop rather than holding their last setpoint. Scroll up for
+        the node that failed first.
     </Accordion>
 </Accordions>
