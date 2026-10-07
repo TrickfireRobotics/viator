@@ -135,13 +135,12 @@ class Heartbeat(Node):
         for motor in all_motors:
             self._robot_interface.stopMotor(motor)
 
-            # debug message
-            self.get_logger().info(
-                colorStr("Stop motor can id" + str(motor.can_id), ColorCodes.FAIL_RED)
-            )
-
-        # finish [debug message]
-        self.get_logger().info(colorStr("Stop all motors!", ColorCodes.FAIL_RED))
+        # One line rather than one per motor. Connection loss is a routine event out in the
+        # field, and 12 lines of it buried everything else that mattered at the same moment.
+        can_ids = " ".join(str(motor.can_id) for motor in all_motors)
+        self.get_logger().warning(
+            colorStr(f"stopped all {len(all_motors)} motors ({can_ids})", ColorCodes.FAIL_RED)
+        )
 
 
 def main(args: list[str] | None = None) -> None:
