@@ -9,6 +9,7 @@ from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_interface import RobotInterface
 from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 from .individual_control_vel import IndividualControlVel
 
@@ -37,12 +38,25 @@ class Arm(Node):
 
         self.individual_control_vel = IndividualControlVel(self, self.bot_interface)
 
+        self._status = StatusReporter(self, "arm")
+        self._status.ok("mode disabled")
+
+    def _modeName(self) -> str:
+        """
+        The current mode as a readable name, tolerating a value mission control shouldn't send.
+        """
+        try:
+            return ArmModeEnum(self.current_mode).name.lower()
+        except ValueError:
+            return f"unknown ({self.current_mode})"
+
     def modeServiceHandler(self, _: Any, response: ArmMode.Response) -> ArmMode.Response:
         response.current_mode = int(self.current_mode)
         return response
 
     def updateArmMode(self, msg: Int32) -> None:
         self.current_mode = msg.data
+        self._status.ok(f"mode {self._modeName()}")
 
         if self.current_mode == 0:
             self.bot_interface.disableMotor(MotorConfigs.ARM_TURNTABLE_MOTOR)

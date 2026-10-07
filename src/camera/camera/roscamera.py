@@ -8,6 +8,7 @@ from rclpy.node import Node  # Handles the creation of nodes
 from sensor_msgs.msg import CompressedImage  # Image is the message type
 
 from lib.node_runner import multiThreaded, runNodes
+from lib.status import StatusReporter
 
 CAPTURE_PERIOD_SEC = 0.1
 
@@ -89,6 +90,9 @@ class RosCamera(Node):
         super().__init__(f"camera_{index}")
 
         self._device_id = device_id
+        # Set by _buildCameraNodes on the first node only; the status topic tracks the
+        # camera module as a whole rather than each capture node.
+        self.status: StatusReporter | None = None
         topic_name = f"video_frames{index}"
 
         # Create the publisher. This publisher will publish an Image
@@ -136,7 +140,17 @@ def _buildCameraNodes() -> list[RosCamera]:
     """
     Builds one node per working camera, numbered by publish order rather than device id.
     """
-    return [RosCamera(index, device_id) for index, device_id in enumerate(getCameras())]
+    device_ids = getCameras()
+    nodes = [RosCamera(index, device_id) for index, device_id in enumerate(device_ids)]
+
+    # One report for the whole process, hung off the first node, since the status topic
+    # tracks modules rather than individual camera nodes.
+    if nodes:
+        status = StatusReporter(nodes[0], "camera")
+        status.ok(f"{len(device_ids)} cameras: {device_ids}")
+        nodes[0].status = status
+
+    return nodes
 
 
 def main(args: list[str] | None = None) -> None:

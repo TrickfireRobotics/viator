@@ -5,6 +5,7 @@ from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_info import RobotInfo
 from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 from . import info_to_json_helper
 
@@ -20,6 +21,9 @@ class MissionControlUpdater(Node):
 
         self.timer = self.create_timer(0.01, self.sendData)
         self.robot_info = RobotInfo(self)
+
+        self._status = StatusReporter(self, "mission_control_updater")
+        self._status.ok()
 
     def sendData(self) -> None:
         json_builder = info_to_json_helper.InfoToJSONHelper()

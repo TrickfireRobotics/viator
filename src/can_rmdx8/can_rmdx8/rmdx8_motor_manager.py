@@ -14,6 +14,7 @@ from std_msgs.msg import String
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs, RMDx8MotorConfig
 from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 from .can_health import CanHealth
 from .rmdx8_motor import RMDx8Motor
@@ -37,9 +38,13 @@ class RMDx8MotorManager(Node):
         self._buffer_lock = Lock()
         self.health = CanHealth(self)
         self.createRMDx8Motors()
-        self.get_logger().info(f"can_rmdx8 ready, {self.motorCount()} motors on can1")
         # Hardware testing
         self.create_timer(0.005, self._handleRequests)
+
+        self._status = StatusReporter(self, "can_rmdx8")
+        self._status.ok(f"{self.motorCount()} motors on can1")
+        self.health.setStatusReporter(self._status, f"{self.motorCount()} motors on can1")
+        self.get_logger().info(f"can_rmdx8 ready, {self.motorCount()} motors on can1")
 
     def _createSubscriber(self, config: RMDx8MotorConfig) -> Subscription:
         can_id = config.can_id

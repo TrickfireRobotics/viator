@@ -8,6 +8,7 @@ from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfig, MotorConfigs
 from lib.interface.robot_interface import RobotInterface
 from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 # How long a drive command stays valid. Mission control republishes continuously while a
 # stick is held, so a gap this long means the command stream stopped rather than that the
@@ -57,6 +58,9 @@ class Drivebase(Node):
         self._last_command_time = time.monotonic()
         self._watchdog = self.create_timer(WATCHDOG_PERIOD_SEC, self.checkCommandTimeout)
 
+        self._status = StatusReporter(self, "drivebase")
+        self._status.ok("awaiting commands")
+
     def moveLeftSide(self, msg: Float32) -> None:
         self._noteCommand()
         self._driveSide(self.LEFT_MOTORS, _clamp(msg.data, MAX_INPUT) * self.SPEED)
@@ -91,6 +95,7 @@ class Drivebase(Node):
         )
         self._driveSide(self.LEFT_MOTORS, 0.0)
         self._driveSide(self.RIGHT_MOTORS, 0.0)
+        self._status.ok("stopped, no commands")
 
     # ***************
     # Private helper methods
@@ -100,6 +105,8 @@ class Drivebase(Node):
         Records that a command arrived, so the watchdog knows the stream is alive.
         """
         self._last_command_time = time.monotonic()
+        if self._stopped:
+            self._status.ok("driving")
         self._stopped = False
 
     def _driveSide(self, motors: Sequence[MotorConfig], velocity: float) -> None:

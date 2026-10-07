@@ -119,6 +119,17 @@ rosapi_node = Node(
     respawn_delay=RESPAWN_DELAY,
 )
 
+# Watches /viator/node_status and prints one readable readiness summary. Purely an
+# observer, so it is safe to restart.
+supervisor_node = Node(
+    package="supervisor",
+    executable="supervisor",
+    name="supervisor",
+    output_format=LINE_ONLY,
+    respawn=True,
+    respawn_delay=RESPAWN_DELAY,
+)
+
 # This is the example node. It will show ROS timers, subscribers, and publishers
 # To include it in the startup, add it to the array in the generate_launch_description() method
 example_node = Node(package="example_node", executable="myExampleNode", name="my_example_node")
@@ -134,6 +145,7 @@ def generate_launch_description() -> launch.LaunchDescription:  # pylint: disabl
             arm_node,
             heartbeat_node,
             camera_node,
+            supervisor_node,
             rosbridge_node,
             rosapi_node,
         ]

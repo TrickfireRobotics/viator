@@ -7,6 +7,7 @@ from lib import configs
 from lib.color_codes import ColorCodes, colorStr
 from lib.interface.robot_interface import RobotInterface
 from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 # Credit: Most of this code is credit to Anna. I (Hong) just
 # add some finishing code and clean up the class.
@@ -61,6 +62,9 @@ class Heartbeat(Node):
         # check connection every 1 second
         self._timer = self.create_timer(1.0, self.check_connection)
 
+        self._status = StatusReporter(self, "heartbeat")
+        self._status.ok("awaiting mission control")
+
     def heartbeat_callback(self, msg: Bool) -> None:
         """
         A call back method for the heartbeat everytime the
@@ -86,6 +90,7 @@ class Heartbeat(Node):
             # flood the default INFO output.
             if self._connection_lost:
                 self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self._status.ok("mission control connected")
                 self._connection_lost = False
             else:
                 self.get_logger().debug(colorStr("Connection active", ColorCodes.GREEN_OK))
@@ -109,6 +114,7 @@ class Heartbeat(Node):
                 return
 
             self.get_logger().warning(colorStr("Connection lost", ColorCodes.WARNING_YELLOW))
+            self._status.degraded("mission control lost, motors stopped")
             self._connection_lost = True
 
             # call the robot interface to stop all motors

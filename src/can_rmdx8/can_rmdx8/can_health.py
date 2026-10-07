@@ -14,6 +14,8 @@ from threading import Lock
 
 from rclpy.node import Node
 
+from lib.status import StatusReporter
+
 REPORT_PERIOD_SEC = 5.0
 
 
@@ -63,7 +65,16 @@ class CanHealth:
         self._detail_samples: dict[str, str] = {}
         self._degraded = False
         self._latest = CanHealthSnapshot(period_sec=report_period_sec)
+        self._status: StatusReporter | None = None
+        self._motor_label = ""
         self._timer = ros_node.create_timer(report_period_sec, self.report)
+
+    def setStatusReporter(self, status: StatusReporter, motor_label: str) -> None:
+        """
+        Lets the node's bus health drive what it reports on /viator/node_status.
+        """
+        self._status = status
+        self._motor_label = motor_label
 
     def recordPoll(self, can_id: int) -> None:
         """
@@ -132,9 +143,18 @@ class CanHealth:
             if self._degraded:
                 logger.info(f"CAN recovered: {snapshot.polls} polls, no errors")
                 self._degraded = False
+            if self._status is not None:
+                self._status.ok(f"{self._motor_label}, bus healthy")
             return
 
         self._degraded = True
+
+        if self._status is not None:
+            self._status.degraded(
+                f"{self._motor_label}, {snapshot.drops} drops "
+                f"{snapshot.faults} faults {snapshot.errors} errors "
+                f"in {snapshot.period_sec:.0f}s"
+            )
 
         if snapshot.drops:
             logger.warning(
