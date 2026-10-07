@@ -4,8 +4,8 @@
   <name>arm</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="vladimirkupryukhin@gmail.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <build_depend>custom_interfaces</build_depend>
 

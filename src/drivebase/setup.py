@@ -13,9 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="cklay@uw.edu",
+    maintainer_email="tfrbtcs@uw.edu",
     description="Connects the controller to the wheel motors",
-    license="TODO: License declaration",
+    license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": ["drivebase = drivebase.drivebase:main"],

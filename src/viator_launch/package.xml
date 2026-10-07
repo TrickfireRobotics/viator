@@ -4,8 +4,8 @@
   <name>viator_launch</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="phillipov@outlook.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <exec_depend>can_moteus</exec_depend>
   <exec_depend>can_rmdx8</exec_depend>

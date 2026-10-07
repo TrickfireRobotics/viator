@@ -18,8 +18,8 @@ setup(
     # Zip-safety is not yet confirmed.
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="phillipov@outlook.com",
+    maintainer_email="tfrbtcs@uw.edu",
     description="TODO: Package description",
-    license="TODO: License declaration",
+    license="Apache-2.0",
     tests_require=["pytest"],
 )

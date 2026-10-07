@@ -13,9 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="vladimirkupryukhin@gmail.com",
+    maintainer_email="tfrbtcs@uw.edu",
     description="TODO: Package description",
-    license="TODO: License declaration",
+    license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": ["mission_control_updater = mission_control_updater.updater:main"],
