@@ -12,7 +12,8 @@
                 "charliermarsh.ruff",
                 "mkhl.shfmt",
                 "esbenp.prettier-vscode",
-                "unifiedjs.vscode-mdx"
+                "unifiedjs.vscode-mdx",
+                "ms-vscode.cmake-tools"
             ]
         }
     }
