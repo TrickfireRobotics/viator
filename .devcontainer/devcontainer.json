@@ -2,7 +2,7 @@
     "dockerComposeFile": "docker-compose.yml",
     "service": "viator",
     "workspaceFolder": "/home/trickfire/viator",
-    "postCreateCommand": "pre-commit install",
+    "postCreateCommand": "make hooks",
     "customizations": {
         "vscode": {
             "extensions": [
