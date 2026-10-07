@@ -1,4 +1,4 @@
-.PHONY: build clean launch container connect can-setup sync-orin format hooks
+.PHONY: build clean launch tui container connect can-setup sync-orin format hooks
 
 build:
 	./scripts/build.sh
@@ -8,6 +8,9 @@ clean:
 
 launch:
 	./scripts/launch.sh
+
+tui:
+	./scripts/tui.sh
 
 container:
 	./scripts/container-launch.sh $(filter-out $@,$(MAKECMDGOALS))

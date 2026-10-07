@@ -27,6 +27,7 @@ RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
 RUN pip3 install --no-cache-dir \
     "numpy<2" \
     moteus \
+    textual \
     pyusb \
     pybind11 \
     pybind11-stubgen \
