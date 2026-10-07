@@ -26,7 +26,17 @@ DEFAULT_EXPECTED_NODES = [
     "arm",
     "heartbeat",
     "camera",
+    "rosbridge",
+    "rosapi",
 ]
+
+# rosbridge and rosapi are third-party, so they can't publish to the status topic. They
+# matter just as much as our own nodes though, so find them in the node graph instead:
+# present means working, absent means they never came up or they died.
+EXTERNAL_NODES = {
+    "rosbridge_websocket": "rosbridge",
+    "rosapi": "rosapi",
+}
 
 CHECK_PERIOD_SEC = 1.0
 
@@ -106,6 +116,7 @@ class Supervisor(Node):
         Prints the startup summary once, then reports only state changes.
         """
         now = time.monotonic()
+        self._pollExternalNodes(now)
 
         if not self._summary_printed:
             everyone_reported = all(name in self._records for name in self._expected)
@@ -122,6 +133,18 @@ class Supervisor(Node):
     # ***************
     # Private helper methods
     # ***************
+    def _pollExternalNodes(self, now: float) -> None:
+        """
+        Records the third-party nodes as present or not by looking at the node graph.
+        """
+        discovered = set(self.get_node_names())
+
+        for node_name, label in EXTERNAL_NODES.items():
+            if node_name in discovered:
+                self._records[label] = NodeRecord(
+                    state=NodeStatus.OK, detail="discovered", last_seen=now
+                )
+
     def _currentLabels(self, now: float) -> dict[str, str]:
         """
         The display state of every expected node, including ones that never reported.
