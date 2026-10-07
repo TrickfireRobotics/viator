@@ -14,6 +14,7 @@ from std_msgs.msg import String
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs, RMDx8MotorConfig
 
+from .can_health import CanHealth
 from .rmdx8_motor import RMDx8Motor
 
 
@@ -33,7 +34,9 @@ class RMDx8MotorManager(Node):
         self._driver_lock = Lock()
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
+        self.health = CanHealth(self)
         self.createRMDx8Motors()
+        self.get_logger().info(f"can_rmdx8 ready, {self.motorCount()} motors on can1")
         # Hardware testing
         self.create_timer(0.005, self._handleRequests)
 
@@ -68,6 +71,7 @@ class RMDx8MotorManager(Node):
             self,
             lambda: self._createRequest(config.can_id, String(data=self._UPDATE_STATE)),
             self._driver_lock,
+            self.health,
         )
         self._id_to_rmdx8_motor[config.can_id] = motor
         self._createSubscriber(config)
