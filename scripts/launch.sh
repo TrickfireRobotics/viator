@@ -10,4 +10,4 @@ source /opt/ros/$ROS_DISTRO/setup.bash
 source ./install/setup.bash
 
 # launch using ros
-ros2 launch viator_launch robot.launch.py --log-level rosbridge_websocket:=warn
+ros2 launch viator_launch robot.launch.py
