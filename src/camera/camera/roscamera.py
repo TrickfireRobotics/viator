@@ -1,9 +1,9 @@
 import cv2  # OpenCV library
-import rclpy  # Python Client Library for ROS 2
 from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Images
-from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node  # Handles the creation of nodes
 from sensor_msgs.msg import CompressedImage  # Image is the message type
+
+from lib.node_runner import multiThreaded, runNodes
 
 
 def getCameras() -> list[int]:
@@ -76,34 +76,22 @@ class RosCamera(Node):
             self._publisher.publish(self.br.cv2_to_compressed_imgmsg(frame))
 
 
+def _buildCameraNodes() -> list[RosCamera]:
+    """
+    Builds one node per working camera, numbered by publish order rather than device id.
+    """
+    return [
+        RosCamera(f"video_frames{index}", camera_id) for index, camera_id in enumerate(getCameras())
+    ]
+
+
 def main(args: list[str] | None = None) -> None:
     """
     The entry point of the node.
     """
 
-    rclpy.init(args=args)
-    try:
-        # We need an executor because running .spin() is a blocking function.
-        # using the MultiThreadedExecutor, we can control multiple nodes
-        executor = MultiThreadedExecutor()
-        nodes = []
-        camera_num = 0
-
-        for camera_id in getCameras():
-            node = RosCamera("video_frames" + str(camera_num), camera_id)
-            nodes.append(node)
-            executor.add_node(node)
-            camera_num += 1
-
-        try:
-            executor.spin()
-        finally:
-            executor.shutdown()
-            for node in nodes:
-                node.destroy_node()
-
-    finally:
-        rclpy.shutdown()
+    # a MultiThreadedExecutor so each camera's capture timer can run concurrently
+    runNodes(_buildCameraNodes, args=args, executor_factory=multiThreaded())
 
 
 if __name__ == "__main__":

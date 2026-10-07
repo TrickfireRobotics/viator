@@ -1,13 +1,10 @@
-import sys
-
-import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32
 
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import runNodes
 
 
 class Drivebase(Node):
@@ -47,19 +44,7 @@ class Drivebase(Node):
 
 
 def main(args: list[str] | None = None) -> None:
-    rclpy.init(args=args)
-    try:
-        drivebase = Drivebase()
-        rclpy.spin(drivebase)  # prints callbacks
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        # Destroy the node explicitly
-        # (optional - otherwise it will be done automatically
-        # when the garbage collector destroys the node object)
-        drivebase.get_logger().info(colorStr("Shutting down drivebase", ColorCodes.BLUE_OK))
-        drivebase.destroy_node()
-        sys.exit(0)
+    runNodes(Drivebase, args=args)
 
 
 if __name__ == "__main__":

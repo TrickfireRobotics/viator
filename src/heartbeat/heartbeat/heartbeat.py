@@ -1,12 +1,12 @@
 import time
 
-import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
 
 from lib import configs
 from lib.color_codes import ColorCodes, colorStr
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import runNodes
 
 # Credit: Most of this code is credit to Anna. I (Hong) just
 # add some finishing code and clean up the class.
@@ -139,12 +139,7 @@ class Heartbeat(Node):
 
 
 def main(args: list[str] | None = None) -> None:
-    rclpy.init(args=args)
-    heartbeat_node = Heartbeat()
-    rclpy.spin(heartbeat_node)
-
-    heartbeat_node.destroy_node()
-    rclpy.shutdown()
+    runNodes(Heartbeat, args=args)
 
 
 if __name__ == "__main__":

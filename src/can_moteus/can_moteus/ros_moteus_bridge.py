@@ -1,8 +1,6 @@
-import sys
 import time
+from collections.abc import Sequence
 
-import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32
 from usb.core import Device
@@ -10,6 +8,7 @@ from usb.core import find as finddev
 
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MoteusMotorConfig, MotorConfigs
+from lib.node_runner import runNodes
 
 from . import moteus_thread_manager
 
@@ -133,25 +132,21 @@ class RosMotuesBridge(Node):
         self.thread_manager.start()
 
 
+def _stopThreads(nodes: Sequence[Node]) -> None:
+    """
+    Joins the per-motor worker threads before the node is torn down.
+    """
+    for node in nodes:
+        if isinstance(node, RosMotuesBridge) and node.thread_manager is not None:
+            node.thread_manager.terminateAllThreads()
+
+
 def main(args: list[str] | None = None) -> None:
     """
     The entry point of the node.
     """
 
-    rclpy.init(args=args)
-    try:
-        node = RosMotuesBridge()
-        rclpy.spin(node)
-
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        # This is done when we ctrl-c the progam to shut it down
-        node.get_logger().info(colorStr("Shutting down can_moteus", ColorCodes.BLUE_OK))
-        if node.thread_manager is not None:
-            node.thread_manager.terminateAllThreads()
-        node.destroy_node()
-        sys.exit(0)
+    runNodes(RosMotuesBridge, args=args, on_shutdown=_stopThreads)
 
 
 if __name__ == "__main__":

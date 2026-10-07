@@ -1,9 +1,6 @@
-import sys
 from enum import IntEnum
 from typing import Any
 
-import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Int32
 
@@ -11,6 +8,7 @@ from custom_interfaces.srv import ArmMode
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import runNodes
 
 from .individual_control_vel import IndividualControlVel
 
@@ -67,18 +65,7 @@ def main(args: list[str] | None = None) -> None:
     The entry point of the node.
     """
 
-    rclpy.init(args=args)
-    try:
-        node = Arm()
-        rclpy.spin(node)
-
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        # This is done when we ctrl-c the progam to shut it down
-        node.get_logger().info(colorStr("Shutting down arm_node node", ColorCodes.BLUE_OK))
-        node.destroy_node()
-        sys.exit(0)
+    runNodes(Arm, args=args)
 
 
 if __name__ == "__main__":
