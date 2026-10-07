@@ -13,7 +13,6 @@
   <exec_depend>mission_control_updater</exec_depend>
   <exec_depend>arm</exec_depend>
   <exec_depend>camera</exec_depend>
-  <exec_depend>example_node</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
