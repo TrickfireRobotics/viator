@@ -40,12 +40,12 @@
     "python.autoComplete.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "./src",
-        "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
     "python.analysis.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "./src",
-        "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
 
     "python.analysis.diagnosticSeverityOverrides": {

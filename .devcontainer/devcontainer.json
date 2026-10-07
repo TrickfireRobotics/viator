@@ -1,7 +1,7 @@
 {
     "dockerComposeFile": "docker-compose.yml",
     "service": "viator",
-    "workspaceFolder": "/home/trickfire/urc-2023",
+    "workspaceFolder": "/home/trickfire/viator",
     "postCreateCommand": "pre-commit install",
     "customizations": {
         "vscode": {

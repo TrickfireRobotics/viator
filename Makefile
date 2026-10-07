@@ -15,7 +15,7 @@ connect:
 can-setup:
 	./scripts/setup-can-network.sh
 
-sync-orin:
+sync:
 	./scripts/sync-to-orin.sh $(IP) $(REMOTE_PATH)
 
 format:
