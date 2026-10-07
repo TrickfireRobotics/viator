@@ -28,7 +28,8 @@ arm_node = Node(package="arm", executable="arm", name="arm_node")
 
 heartbeat_node = Node(package="heartbeat", executable="heartbeat", name="heartbeat_node")
 
-camera_node = Node(package="camera", executable="roscamera", name="camera_node")
+# no name= here: this process hosts one node per camera and they name themselves
+camera_node = Node(package="camera", executable="roscamera")
 
 # This is the example node. It will show ROS timers, subscribers, and publishers
 # To include it in the startup, add it to the array in the generate_launch_description() method

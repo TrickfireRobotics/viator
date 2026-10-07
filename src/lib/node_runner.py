@@ -12,6 +12,7 @@ import sys
 from collections.abc import Callable, Sequence
 
 import rclpy
+import rclpy.logging
 from rclpy.executors import (
     Executor,
     ExternalShutdownException,
@@ -69,6 +70,12 @@ def runNodes(
     try:
         created = factory()
         nodes = [created] if isinstance(created, Node) else list(created)
+
+        if not nodes:
+            # spinning an executor with no nodes would just burn CPU; exiting lets the
+            # launch system's respawn handle the retry instead
+            rclpy.logging.get_logger("node_runner").error("no nodes to run, exiting")
+            return
 
         executor = executor_factory(nodes) if executor_factory is not None else None
         if executor is None:
