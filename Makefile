@@ -1,7 +1,10 @@
-.PHONY: build launch container connect can-setup sync-orin format hooks
+.PHONY: build clean launch container connect can-setup sync-orin format hooks
 
 build:
 	./scripts/build.sh
+
+clean:
+	rm -rf build install log
 
 launch:
 	./scripts/launch.sh
