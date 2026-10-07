@@ -17,7 +17,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     python3-numpy \
     libboost-python-dev \
     libopencv-dev \
-    python3-opencv
+    python3-opencv \
+    ros-humble-cv-bridge
 
 RUN pip3 install --no-cache-dir \
     "numpy<2" \

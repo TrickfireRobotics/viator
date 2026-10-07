@@ -7,6 +7,10 @@
   <maintainer email="kimdavid2222@gmail.com">trickfire</maintainer>
   <license>TODO: License declaration</license>
 
+  <depend>rclpy</depend>
+  <depend>cv_bridge</depend>
+  <depend>sensor_msgs</depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>
