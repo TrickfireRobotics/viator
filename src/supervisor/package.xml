@@ -3,19 +3,13 @@
 <package format="3">
   <name>supervisor</name>
   <version>0.0.0</version>
-  <description>Collects per-node health reports and summarises rover readiness.</description>
-  <maintainer email="matysta@outlook.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Collects per-node health reports and summarises rover readiness</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>custom_interfaces</exec_depend>
-
   <exec_depend>lib</exec_depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

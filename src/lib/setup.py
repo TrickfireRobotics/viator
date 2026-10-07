@@ -13,8 +13,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="matysta@outlook.com",
-    description="Shared helpers used by every Viator node.",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Shared helpers used by every Viator node",
+    license="Apache-2.0",
 )

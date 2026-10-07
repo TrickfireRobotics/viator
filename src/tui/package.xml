@@ -3,20 +3,16 @@
 <package format="3">
   <name>tui</name>
   <version>0.0.0</version>
-  <description>Terminal dashboard showing rover module status and a filtered live log.</description>
-  <maintainer email="matysta@outlook.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Terminal dashboard showing rover module status and a filtered live log</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>custom_interfaces</exec_depend>
+  <exec_depend>lib</exec_depend>
   <!-- textual has no rosdep key, it's pip installed in .devcontainer/Dockerfile -->
 
-  <exec_depend>lib</exec_depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
   <export>

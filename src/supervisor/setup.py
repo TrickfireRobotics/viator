@@ -13,10 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="matysta@outlook.com",
-    description="Collects per-node health reports and summarises rover readiness.",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Collects per-node health reports and summarises rover readiness",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": ["supervisor = supervisor.supervisor:main"],
     },

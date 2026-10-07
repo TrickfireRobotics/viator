@@ -13,10 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="vanillanguyen635@gmail.com",
-    description="TODO: Package description",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Monitors rover connectivity and stops the motors if it's lost",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": [
             # ros 2 executable = packagename.filename : function we want to run

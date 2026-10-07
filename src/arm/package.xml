@@ -3,20 +3,14 @@
 <package format="3">
   <name>arm</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="vladimirkupryukhin@gmail.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Controls the rover arm's motors and operating mode</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <build_depend>custom_interfaces</build_depend>
 
   <exec_depend>custom_interfaces</exec_depend>
-
   <exec_depend>lib</exec_depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

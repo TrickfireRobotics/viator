@@ -13,10 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="matysta@outlook.com",
-    description="Terminal dashboard showing rover module status and a filtered live log.",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Terminal dashboard showing rover module status and a filtered live log",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": ["viator_tui = tui.app:main"],
     },

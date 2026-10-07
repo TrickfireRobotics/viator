@@ -3,18 +3,13 @@
 <package format="3">
   <name>lib</name>
   <version>0.0.0</version>
-  <description>Shared helpers used by every Viator node: motor configs, the robot interface, status reporting, and the node entry-point runner.</description>
-  <maintainer email="matysta@outlook.com">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Shared helpers used by every Viator node</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>custom_interfaces</exec_depend>
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
