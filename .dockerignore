@@ -1,0 +1,18 @@
+# Build output: the runtime image builds its own, and shipping the host's would both
+# bloat the context and risk baking in a stale or wrong-architecture build.
+build/
+install/
+log/
+
+.git/
+.mypy_cache/
+__pycache__/
+*.pyc
+
+# cv_bridge comes from apt (ros-humble-cv-bridge). The submodule is not initialised and
+# building it from source would add a long C++ compile for no gain.
+src/vision_opencv/
+
+docs/
+.github/
+.vscode/

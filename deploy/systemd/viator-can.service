@@ -1,0 +1,22 @@
+# Brings the CAN bus up at boot. Safe to enable: this only configures the interface and
+# puts the drivebase controllers into speed mode, it does not command any motion.
+#
+#   sudo systemctl enable --now viator-can.service
+
+[Unit]
+Description=Viator CAN bus bringup
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/viator-deploy/setup-can-network.sh
+
+# The CAN transceiver occasionally isn't ready on the first try after a cold boot.
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,2 +1,2 @@
 Defaults env_keep+="PYTHONPATH AMENT_PREFIX_PATH"
-trickfire ALL=(root) NOPASSWD: /usr/sbin/ip, /usr/sbin/modprobe, /usr/bin/candump, /usr/bin/cansend, /usr/bin/cangen, /usr/bin/cansniffer, /home/trickfire/viator/install/can_rmdx8/lib/can_rmdx8/can_rmdx8
+trickfire ALL=(root) NOPASSWD: /usr/sbin/ip, /usr/sbin/modprobe, /usr/bin/candump, /usr/bin/cansend, /usr/bin/cangen, /usr/bin/cansniffer, /home/trickfire/viator/install/can_rmdx8/lib/can_rmdx8/can_rmdx8, /opt/viator/install/lib/can_rmdx8/can_rmdx8

@@ -41,4 +41,4 @@ jobs:
               uses: mfinelli/setup-shfmt@v4
 
             - name: Check shell formatting
-              run: shfmt -i 4 -s -d scripts/ .devcontainer/
+              run: shfmt -i 4 -s -d scripts/ .devcontainer/ deploy/

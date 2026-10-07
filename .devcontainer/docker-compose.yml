@@ -3,8 +3,8 @@ services:
         build:
             context: ..
             dockerfile: .devcontainer/Dockerfile
-            target: viator
-        image: viator:latest
+            target: dev
+        image: viator:dev
         container_name: viator
         user: trickfire
 
