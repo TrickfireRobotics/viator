@@ -38,9 +38,6 @@ class Heartbeat(Node):
         # self._robot_info = RobotInfo(self)
         self._robot_interface = RobotInterface(self)
 
-        # give enough time (10s) for others to initialize
-        time.sleep(10)
-
         # flag to store connection status; starts "lost" until the first heartbeat arrives
         self._connection_lost = True
 
