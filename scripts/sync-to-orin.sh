@@ -14,6 +14,8 @@ rsync -avz --delete --progress \
     --exclude='build/' \
     --exclude='install/' \
     --exclude='log/' \
+    --exclude='dist/' \
+    --exclude='node_modules/' \
     --exclude='__pycache__/' \
     --exclude='*.pyc' \
     "${LOCAL_PATH}" \
