@@ -1,16 +1,15 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>supervisor</name>
+  <name>lib</name>
   <version>0.0.0</version>
-  <description>Collects per-node health reports and summarises rover readiness.</description>
+  <description>Shared helpers used by every Viator node: motor configs, the robot interface, status reporting, and the node entry-point runner.</description>
   <maintainer email="matysta@outlook.com">trickfire</maintainer>
   <license>TODO: License declaration</license>
 
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>custom_interfaces</exec_depend>
-
-  <exec_depend>lib</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

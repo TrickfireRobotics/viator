@@ -12,6 +12,8 @@
 
   <exec_depend>custom_interfaces</exec_depend>
 
+  <exec_depend>lib</exec_depend>
+
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
   <test_depend>ament_pep257</test_depend>

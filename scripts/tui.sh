@@ -5,8 +5,6 @@
 
 cd "$(dirname "$0")/.."
 
-export PYTHONPATH="$(pwd)/src/:$PYTHONPATH"
-
 source /opt/ros/$ROS_DISTRO/setup.bash
 source ./install/setup.bash
 

@@ -16,10 +16,10 @@ pytest.importorskip("custom_interfaces", reason="needs the workspace to be built
 
 from rcl_interfaces.msg import Log
 from textual.widgets import DataTable, Input, RichLog
-from tui.app import ViatorTui
-from tui.bridge import LogRecord, StatusRecord
 
 from custom_interfaces.msg import NodeStatus
+from tui.app import ViatorTui
+from tui.bridge import LogRecord, StatusRecord
 
 LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
 

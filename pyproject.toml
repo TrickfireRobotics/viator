@@ -15,6 +15,21 @@ select = [
     "RUF", # ruff-specific rules
 ]
 
+[tool.ruff.lint.isort]
+known-first-party = [
+    "arm",
+    "camera",
+    "can_moteus",
+    "can_rmdx8",
+    "custom_interfaces",
+    "drivebase",
+    "heartbeat",
+    "lib",
+    "mission_control_updater",
+    "supervisor",
+    "tui",
+]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

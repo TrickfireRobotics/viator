@@ -4,7 +4,6 @@ cd "$(dirname "$0")/.."
 
 # enable colored logs
 export RCUTILS_COLORIZED_OUTPUT=1
-export PYTHONPATH="$(pwd)/src/:$PYTHONPATH"
 
 # Trim the console log line down. The default is
 #   [{severity}] [{time}] [{name}]: {message}

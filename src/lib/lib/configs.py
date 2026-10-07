@@ -25,7 +25,7 @@ class MotorConfig:
     A dataclass that contains config values relating to motors connected via the can bus.
     """
 
-    can_id: int | None = None
+    can_id: int
     """
     The can id of the motor.
     """
