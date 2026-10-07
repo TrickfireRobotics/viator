@@ -21,5 +21,4 @@ setup(
     maintainer_email="tfrbtcs@uw.edu",
     description="TODO: Package description",
     license="Apache-2.0",
-    tests_require=["pytest"],
 )

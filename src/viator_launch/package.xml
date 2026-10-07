@@ -14,12 +14,6 @@
   <exec_depend>arm</exec_depend>
   <exec_depend>camera</exec_depend>
   <exec_depend>example_node</exec_depend>
-  
-
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
