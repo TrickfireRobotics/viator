@@ -11,4 +11,4 @@ source /home/trickfire/urc-2023/install/setup.bash
 
 export PYTHONPATH="/home/trickfire/urc-2023/src/:$PYTHONPATH"
 
-ros2 launch viator_launch robot.launch.py --log-level rosbridge_websocket:=warn
+ros2 launch --log-level rosbridge_websocket:=warn viator_launch robot.launch.py
