@@ -6,7 +6,11 @@ bus, no cameras, no motors. These run inside the dev container, where ROS and te
 both present, and skip anywhere they aren't.
 """
 
+import asyncio
+import functools
 import time
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import pytest
 
@@ -22,6 +26,23 @@ from tui.app import ViatorTui
 from tui.bridge import LogRecord, StatusRecord
 
 LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
+
+
+def asyncTest(fn: Callable[..., Coroutine[Any, Any, None]]) -> Callable[..., None]:
+    """
+    Runs an async test body in its own event loop.
+
+    Deliberately hand-rolled instead of using pytest-asyncio: installing that pulls in a
+    pytest new enough to drop the deprecated `path` hook argument, which breaks ROS's
+    launch_testing plugin and takes `colcon test` down with it. functools.wraps keeps the
+    signature intact so pytest still injects fixtures.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        asyncio.run(fn(*args, **kwargs))
+
+    return wrapper
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +67,7 @@ def makeLog(level: int, node: str, message: str) -> LogRecord:
     )
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_panes_mount():
     app = ViatorTui()
     async with app.run_test():
@@ -55,7 +76,7 @@ async def test_panes_mount():
         assert app.query_one("#search", Input) is not None
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_status_rows_appear():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -65,7 +86,7 @@ async def test_status_rows_appear():
         assert app.query_one("#status", DataTable).row_count == 2
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_default_filter_hides_debug():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -78,7 +99,7 @@ async def test_default_filter_hides_debug():
         assert shown == [Log.INFO, Log.ERROR]
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_pause_stops_autoscroll():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -90,7 +111,7 @@ async def test_pause_stops_autoscroll():
         assert not app._paused
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_level_key_cycles():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -99,7 +120,7 @@ async def test_level_key_cycles():
         assert app._level_index == (start + 1) % 4
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_search_toggles_and_clears():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -113,7 +134,7 @@ async def test_search_toggles_and_clears():
         assert not app.query_one("#search", Input).has_class("visible")
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_text_filter_narrows_log():
     app = ViatorTui()
     async with app.run_test() as pilot:
@@ -129,7 +150,7 @@ async def test_text_filter_narrows_log():
         assert shown[0].node == "camera"
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_save_writes_only_visible_lines(tmp_path, monkeypatch):
     import tui.app as app_mod
 
@@ -152,7 +173,7 @@ async def test_save_writes_only_visible_lines(tmp_path, monkeypatch):
         assert "created publisher" not in body
 
 
-@pytest.mark.asyncio
+@asyncTest
 async def test_module_goes_stale_when_reports_stop():
     app = ViatorTui()
     async with app.run_test() as pilot:

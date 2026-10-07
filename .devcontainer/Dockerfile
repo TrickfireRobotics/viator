@@ -91,7 +91,6 @@ RUN pip3 install --no-cache-dir \
     ruff \
     mypy \
     pre-commit \
-    pytest-asyncio \
     "pydocstyle>=6.3.0" \
     && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
     -o /usr/local/bin/shfmt \
