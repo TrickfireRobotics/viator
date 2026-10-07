@@ -1,7 +1,8 @@
 {
     "editor.rulers": [100],
     "files.associations": {
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "*.sudoers": "plaintext"
     },
     "files.exclude": {
         "**/.mypy_cache": true,

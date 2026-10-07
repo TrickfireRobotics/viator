@@ -27,7 +27,7 @@ RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
 RUN pip3 install --no-cache-dir \
     "numpy<2" \
     moteus \
-    textual \
+    "textual>=8,<9" \
     pyusb \
     pybind11 \
     pybind11-stubgen \
@@ -40,7 +40,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y nodejs
 
-RUN pip3 install --no-cache-dir ruff mypy pre-commit \
+RUN pip3 install --no-cache-dir ruff mypy pre-commit pytest-asyncio \
     && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
     -o /usr/local/bin/shfmt \
     && chmod +x /usr/local/bin/shfmt
@@ -67,7 +67,7 @@ RUN useradd trickfire --shell /bin/bash --create-home --no-log-init -G video,sud
 # just from the container's `cap_add`/`privileged` settings. Grant NOPASSWD sudo for
 # only the specific CAN tooling and the built can_rmdx8 node so this works without an
 # interactive password, without handing trickfire unrestricted root.
-COPY .devcontainer/trickfire-can-sudoers /etc/sudoers.d/trickfire-can
+COPY .devcontainer/trickfire-can.sudoers /etc/sudoers.d/trickfire-can
 RUN chmod 0440 /etc/sudoers.d/trickfire-can && visudo -cf /etc/sudoers.d/trickfire-can
 
 COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
