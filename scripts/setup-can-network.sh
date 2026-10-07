@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Commands
 START_CMD="8800000000000000"
