@@ -3,7 +3,7 @@
 <package format="3">
   <name>custom_interfaces</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>Custom ROS message and service definitions for Viator</description>
   <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
   <license>Apache-2.0</license>
 

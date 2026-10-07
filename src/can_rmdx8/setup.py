@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Controls RMDx8 motors over CAN",
     license="Apache-2.0",
     entry_points={
         "console_scripts": ["can_rmdx8 = can_rmdx8.rmdx8_motor_manager:main"],

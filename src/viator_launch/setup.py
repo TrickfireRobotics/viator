@@ -19,6 +19,6 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Launch files for starting the Viator rover",
     license="Apache-2.0",
 )

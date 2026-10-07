@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Monitors rover connectivity and stops the motors if it's lost",
     license="Apache-2.0",
     entry_points={
         "console_scripts": [

@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Controls the rover arm's motors and operating mode",
     license="Apache-2.0",
     entry_points={
         "console_scripts": ["arm = arm.arm:main"],

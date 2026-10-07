@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Captures and publishes compressed video from the rover's cameras",
     license="Apache-2.0",
     entry_points={
         "console_scripts": ["roscamera = camera.roscamera:main"],

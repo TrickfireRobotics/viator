@@ -14,7 +14,7 @@ setup(
     zip_safe=True,
     maintainer="trickfire",
     maintainer_email="tfrbtcs@uw.edu",
-    description="TODO: Package description",
+    description="Sends rover telemetry to Mission Control",
     license="Apache-2.0",
     entry_points={
         "console_scripts": ["mission_control_updater = mission_control_updater.updater:main"],
