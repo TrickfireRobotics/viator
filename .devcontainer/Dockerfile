@@ -20,6 +20,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     python3-opencv
 
 RUN pip3 install --no-cache-dir \
+    "numpy<2" \
     moteus \
     pyusb \
     pybind11 \
