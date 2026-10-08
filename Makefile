@@ -42,7 +42,7 @@ can-setup:
 	./scripts/setup-can-network.sh
 
 sync:
-	./scripts/sync-to-orin.sh $(IP) $(REMOTE_PATH)
+	./scripts/sync-to-orin.sh
 
 format:
 	ruff format src

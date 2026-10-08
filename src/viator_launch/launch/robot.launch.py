@@ -32,12 +32,15 @@ drivebase_node = Node(
 )
 
 # Runs as root via sudo: opening the raw CAN socket for can1 needs CAP_NET_RAW/NET_ADMIN,
-# which the non-root trickfire user doesn't have (see .devcontainer/trickfire-can-sudoers).
+# which the non-root trickfire user doesn't have (see .devcontainer/trickfire-can.sudoers).
+# Bytecode writing is off because --symlink-install points install/ back into src/, so a
+# root-run node leaves root-owned __pycache__ in the source tree that no one else can clear.
 can_rmdx8_node = Node(
     package="can_rmdx8",
     executable="can_rmdx8",
     name="can_rmdx8_node",
     prefix="sudo -n --",
+    additional_env={"PYTHONDONTWRITEBYTECODE": "1"},
     output_format=LINE_ONLY,
     on_exit=Shutdown(),
 )
