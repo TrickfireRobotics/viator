@@ -5,6 +5,7 @@
         "*.sudoers": "plaintext"
     },
     "files.exclude": {
+        "**/node_modules": true,
         "**/.mypy_cache": true,
         "**/.ruff_cache": true
     },
