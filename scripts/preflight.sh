@@ -112,11 +112,11 @@ fi
 
 echo
 if [ "$FAIL_COUNT" -eq 0 ]; then
-    echo "  $(green "ready") - ${PASS_COUNT} checks passed"
+    echo "$(green "ready") - ${PASS_COUNT} checks passed"
     echo
     exit 0
 fi
 
-echo "  $(red "NOT ready") - ${FAIL_COUNT} failed, ${PASS_COUNT} passed"
+echo "$(red "NOT ready") - ${FAIL_COUNT} failed, ${PASS_COUNT} passed"
 echo
 exit 1

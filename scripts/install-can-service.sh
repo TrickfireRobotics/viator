@@ -70,4 +70,4 @@ else
     warn "$UNIT_NAME" "enabled, but failed to start now - check 'journalctl -u ${UNIT_NAME}'"
 fi
 
-printf '\n  %s\n\n' "$(dim "CAN now comes up on boot. 'make launch' will find it already up.")"
+printf '\n%s\n\n' "$(dim "CAN now comes up on boot. 'make launch' will find it already up.")"

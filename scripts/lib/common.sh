@@ -49,34 +49,34 @@ PASS_COUNT=0
 FAIL_COUNT=0
 
 banner() {
-    printf '\n  %s  %s\n\n' "$(bold "viator")" "$(dim "$1")"
+    printf '\n%s  %s\n\n' "$(bold "viator")" "$(dim "$1")"
 }
 
 # A numbered phase heading, e.g. `step 2/5 "can bus"`.
 step() {
-    printf '  %s %s\n' "$(dim "[$1]")" "$(bold "$2")"
+    printf '%s %s\n' "$(dim "[$1]")" "$(bold "$2")"
 }
 
 ok() {
-    printf '  [%s] %-22s %s\n' "$(green ' ok ')" "$1" "$(dim "${2:-}")"
+    printf '[%s] %-22s %s\n' "$(green ' ok ')" "$1" "$(dim "${2:-}")"
     PASS_COUNT=$((PASS_COUNT + 1))
 }
 
 bad() {
-    printf '  [%s] %-22s %s\n' "$(red 'FAIL')" "$1" "${2:-}"
+    printf '[%s] %-22s %s\n' "$(red 'FAIL')" "$1" "${2:-}"
     FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
 warn() {
-    printf '  [%s] %-22s %s\n' "$(yellow 'warn')" "$1" "${2:-}"
+    printf '[%s] %-22s %s\n' "$(yellow 'warn')" "$1" "${2:-}"
 }
 
 note() {
-    printf '  %s %s\n' "$(dim '     ')" "$(dim "$1")"
+    printf '%s %s\n' "$(dim '      ')" "$(dim "$1")"
 }
 
 die() {
-    printf '\n  %s %s\n\n' "$(red 'error:')" "$1" >&2
+    printf '\n%s %s\n\n' "$(red 'error:')" "$1" >&2
     exit "${2:-1}"
 }
 
@@ -152,13 +152,13 @@ platformName() {
 # Call at the top of a script that only works on the rover's hardware.
 requireOrin() {
     isOrin && return 0
-    die "this needs the rover's Orin - $(platformName) doesn't have ${1:-the hardware this talks to}"
+    die "this needs to be ran in the orin!"
 }
 
 # Call at the top of a script that only makes sense run from off the rover.
 requireNotOrin() {
     isOrin || return 0
-    die "this is the Orin - ${1:-run it from your dev machine instead}"
+    die "this is the orin, run it on your host!"
 }
 
 # Prints a script's own header comment as its --help, so the two can't disagree. Takes the
@@ -205,11 +205,10 @@ readonly SPINNER_FRAMES='|/-\'
 _runStepVerbose() {
     local label="$1"
     shift
-    printf '  %s %s\n' "$(dim '[ .. ]')" "$label"
+    printf '%s %s\n' "$(dim '[ .. ]')" "$label"
 
-    # the status that matters is the command's, not sed's, hence PIPESTATUS
-    "$@" 2>&1 | sed 's/^/         /'
-    local status="${PIPESTATUS[0]}"
+    "$@" 2>&1
+    local status=$?
 
     if [ "$status" -eq 0 ]; then
         ok "$label" "done"
@@ -235,12 +234,12 @@ runStep() {
     local pid=$!
 
     local frame=0 width detail
-    width=$(($(tput cols 2>/dev/null || echo 80) - 34))
+    width=$(($(tput cols 2>/dev/null || echo 80) - 32))
     [ "$width" -lt 12 ] && width=12
 
     while kill -0 "$pid" 2>/dev/null; do
         detail="$(tail -n 1 "$log" 2>/dev/null | tr -d '\r' | tr -cd '[:print:]')"
-        printf '\r  [ %s  ] %-22s %s\033[K' \
+        printf '\r[ %s  ] %-22s %s\033[K' \
             "$(blue "${SPINNER_FRAMES:frame:1}")" "$label" "$(dim "${detail:0:width}")"
         frame=$(((frame + 1) % ${#SPINNER_FRAMES}))
         sleep 0.12
@@ -258,8 +257,8 @@ runStep() {
 
     bad "$label" "exited $status"
     printf '\n'
-    tail -n 30 "$log" | sed 's/^/         /'
-    printf '\n  %s %s\n' "$(dim 'full output:')" "$log"
+    tail -n 30 "$log"
+    printf '\n%s %s\n' "$(dim 'full output:')" "$log"
     return "$status"
 }
 

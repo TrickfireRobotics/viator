@@ -49,12 +49,12 @@ reportLaunchFailure() {
     first="$(grep -m 3 -F '[ERROR]' "$LAUNCH_LOG" 2>/dev/null || true)"
 
     if [ -n "$first" ]; then
-        printf '\n  %s\n' "$(bold 'first error')"
-        sed 's/^/         /' <<<"$first"
+        printf '\n%s\n' "$(bold 'first error')"
+        printf '%s\n' "$first"
     fi
 
-    printf '\n  %s\n' "$(dim 'last 20 lines')"
-    tail -n 20 "$LAUNCH_LOG" | sed 's/^/         /'
+    printf '\n%s\n' "$(dim 'last 20 lines')"
+    tail -n 20 "$LAUNCH_LOG"
 }
 
 cleaned_up=false
@@ -68,7 +68,7 @@ cleanup() {
     restoreTerminal
 
     if [ "$owns_graph" = true ] && [ -n "$graph_pid" ] && kill -0 "$graph_pid" 2>/dev/null; then
-        printf '\n  %s\n' "$(dim 'stopping the node graph ...')"
+        printf '\n%s\n' "$(dim 'stopping the node graph ...')"
         # SIGINT rather than SIGTERM: launch treats it as a shutdown request and runs the
         # nodes' own handlers, which is what stops the motors.
         kill -INT "$graph_pid" 2>/dev/null || true
@@ -80,10 +80,10 @@ cleanup() {
             warn "node graph" "did not stop in 10s, killing it"
             kill -KILL "$graph_pid" 2>/dev/null || true
         fi
-        printf '  %s\n' "$(dim 'stopped.')"
+        printf '%s\n' "$(dim 'stopped.')"
     fi
 
-    printf '  %s %s\n\n' "$(dim 'launch output:')" "$LAUNCH_LOG"
+    printf '%s %s\n\n' "$(dim 'launch output:')" "$LAUNCH_LOG"
 }
 trap cleanup EXIT INT TERM
 
@@ -154,7 +154,7 @@ if [ ! -t 1 ]; then
     exit 0
 fi
 
-printf '  %s\n' "$(dim 'opening the dashboard - press ? for keys, q to quit')"
+printf '%s\n' "$(dim 'opening the dashboard - press ? for keys, q to quit')"
 sleep 1
 
 export VIATOR_LAUNCH_LOG="$LAUNCH_LOG"
