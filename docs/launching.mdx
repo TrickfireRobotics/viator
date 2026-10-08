@@ -1,15 +1,143 @@
 ---
 title: Launching the Rover
-description: Build, bring up CAN, and launch the full node graph.
+description: One command to bring Viator up - checks, container, build, node graph and dashboard.
 ---
 
-This walks through the full workflow for getting Viator's software running end to end: starting mission control on your own machine, connecting to the rover, bringing up the CAN bus, and launching the ROS 2 node graph. It assumes you've already done the one-time dev container setup from [Getting Started](./getting-started.mdx).
+Getting Viator running is one command. SSH into the rover, run `make launch`, and you end up looking at the [dashboard](./dashboard.mdx) with the rover running behind it.
 
-This is the development workflow, where you build from source on the rover. For competition, build the self-contained image instead and deploy that; see [Deploying to the Rover](./deployment.mdx).
+```bash title="Terminal"
+ssh trickfire@192.168.0.112
+cd ~/viator
+make launch
+```
+
+This is the development workflow, where the rover builds from the source tree on its own disk. For competition, build the self-contained image and deploy that instead; see [Deploying to the Rover](./deployment.mdx).
+
+## What `make launch` does
+
+Five phases, each reporting before it runs anything, so a failure tells you which link in the chain broke instead of leaving you to work it out:
+
+```text
+  viator  bringing the rover up
+
+  [1/5] host
+  [ ok ] docker                 28.3.1
+  [ ok ] compose                v2.33.0
+  [ ok ] workspace              /home/trickfire/viator (main @ a1b2c3d)
+  [2/5] can bus
+  [ ok ] can1                   up at 1000000 bit/s
+  [3/5] container
+  [ ok ] image viator:dev       done
+  [ ok ] container viator       done
+  [4/5] workspace
+  [ ok ] colcon build           12 packages
+  [5/5] rover
+  [ ok ] node graph             running as pid 487
+```
+
+| Phase       | Does                                                                            |
+| ----------- | ------------------------------------------------------------------------------- |
+| `host`      | Docker is installed and its daemon is reachable, and reports which commit you're about to run |
+| `can bus`   | `can1` is up at 1 Mbit, and brings it up if it isn't                            |
+| `container` | Builds the `viator:dev` image if anything changed, and starts the container      |
+| `workspace` | `colcon build` inside the container                                              |
+| `rover`     | Starts the node graph, then opens the dashboard on top of it                      |
+
+Then it hands you the dashboard. Press `?` in there for the keys, `q` to quit.
+
+<Callout type="info" title="It works from either side">
+    Run it on the rover's host and it does all five phases. Run it inside the dev container, where
+    the first four are already done, and it goes straight to the node graph and the dashboard.
+    There is nothing to remember about which terminal you are in.
+</Callout>
+
+<Callout type="warning" title="Quitting the dashboard stops the rover">
+    `make launch` owns the node graph it started, so `q` shuts it down, and so does losing your SSH
+    session. That is the right behaviour on a bench, where a dropped connection should stop the
+    motors rather than leave them holding a setpoint. To run the rover independently of your
+    terminal, use `make graph` and `make tui` as [two separate commands](#running-it-without-the-dashboard).
+</Callout>
+
+## Flags
+
+Pass these through `FLAGS=`:
+
+```bash title="Terminal"
+make launch FLAGS=-B      # skip the workspace build
+```
+
+| Flag | Does                                                                     |
+| ---- | ------------------------------------------------------------------------ |
+| `-B` | Skip `colcon build`. Relaunch without recompiling                        |
+| `-v` | Stream the build output instead of collapsing it to a status line        |
+| `-n` | Rebuild the container image with no build cache                          |
+| `-c` | Force recreate the container                                             |
+| `-s` | Skip the CAN check. The graph will shut down when `can_rmdx8` can't open the bus |
+
+`-B` is the one you'll use most: once the workspace is built, `--symlink-install` means Python edits take effect without rebuilding, so relaunching is just the rover coming back up.
+
+## The other commands
+
+```bash title="Terminal"
+make            # list every target
+```
+
+| Command       | Does                                                                   |
+| ------------- | ---------------------------------------------------------------------- |
+| `make launch` | Bring everything up and open the dashboard                             |
+| `make status` | Check the rover is actually ready to drive                             |
+| `make stop`   | Stop the node graph. Add `FLAGS=-d` to stop the container too          |
+| `make tui`    | Open the dashboard against a rover that is already running             |
+| `make graph`  | Run the node graph alone, in the foreground, no dashboard              |
+| `make build`  | Build the workspace                                                    |
+| `make connect`| Get a shell in the dev container                                       |
+
+`status`, `stop`, `tui`, `graph` and `build` all work from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
+
+## Confirm it came up
+
+`make launch` leaves you in the dashboard, where every module should reach `ok` within a few seconds:
+
+```text
+╭─ modules  8 reporting ───────────────────────────────────────────────╮
+│  module                   state     detail                          │
+│  arm                      ok        mode disabled                   │
+│  camera                   ok        2 cameras: [0, 1]               │
+│  can_rmdx8                ok        6 motors on can1                │
+│  drivebase                ok        awaiting commands               │
+│  heartbeat                ok        awaiting mission control        │
+│  mission_control_updater  ok                                        │
+│  rosapi                   ok        discovered                      │
+│  rosbridge                ok        discovered                      │
+╰──────────────────────────────────────────────────────────────────────╯
+```
+
+For the same answer without opening anything, from a second terminal:
+
+```bash title="Terminal 2"
+make status
+```
+
+```text
+  viator  preflight
+
+  [ ok ] setup                  dev
+  [ ok ] image                  viator:dev
+  [ ok ] container              viator running
+  [ ok ] can1                   up at 1000000 bit/s
+  [ ok ] motors                 all 6 responding
+  [ ok ] cameras                2 video device(s): /dev/video0 /dev/video1
+  [ ok ] rosbridge              listening on 9090
+  [ ok ] disk                   42103 MB free on /var/log
+
+  ready - 8 checks passed
+```
+
+It exits non-zero if anything failed, so you can gate a script on it. The `motors` check is the one worth caring about: it listens to the bus and names the CAN IDs that aren't answering, which is how you find a loose connector before a scored run rather than during one.
 
 ## Start mission control
 
-Mission control lives in its own repo, separate from `viator`.
+Mission control lives in its own repo and runs on **your** machine, not the rover.
 
 <Steps>
     <Step>
@@ -17,7 +145,7 @@ Mission control lives in its own repo, separate from `viator`.
         [mission-control](https://github.com/TrickfireRobotics/mission-control) and install its
         dependencies:
 
-        ```bash title="Terminal"
+        ```bash title="Terminal (your machine)"
         git clone https://github.com/TrickfireRobotics/mission-control.git
         cd mission-control
         npm install
@@ -26,163 +154,86 @@ Mission control lives in its own repo, separate from `viator`.
     <Step>
         Start it:
 
-        ```bash title="Terminal"
+        ```bash title="Terminal (your machine)"
         npm run dev
         ```
     </Step>
     <Step>
-        Once it's open, go to the settings tab and point the websocket at the rover's address
-        (the same one you'll SSH into below). The connection indicator turns green once the
-        rover's `rosbridge_server` is up and reachable.
+        In the settings tab, point the websocket at the rover's address - the same one you SSH
+        into. The connection indicator turns green once the rover's `rosbridge_server` is up and
+        reachable.
     </Step>
 
 </Steps>
 
-<Callout type="info" title="Run this on your own machine">
-    Mission control is a plain Node/Vite project - run it on your host, not inside the `viator` dev
-    container.
+<Callout type="success" title="The full chain is live">
+    Mission control's websocket indicator is green, `make status` says ready, and every module in
+    the dashboard is `ok`. Rover hardware through to mission control.
 </Callout>
 
-## Connect to the rover
+## Running it without the dashboard
 
-```bash title="Terminal"
-ssh trickfire@192.168.0.112
-cd ~/viator
-```
+Use this when you want the rover to outlive the terminal you are watching it from, or you want the raw launch output rather than the dashboard's rendering of it.
 
-## Bring up the CAN bus
+<Steps>
+    <Step>
+        In one terminal, run the graph in the foreground:
 
-Open a second terminal on the rover (SSH in again) and start watching the bus before you bring it up, so you can see traffic appear as soon as it's live:
+        ```bash title="Terminal 1"
+        make graph
+        ```
+    </Step>
+    <Step>
+        In another, attach the dashboard:
+
+        ```bash title="Terminal 2"
+        make tui
+        ```
+
+        This one only observes, so closing it or losing the connection leaves the rover running.
+    </Step>
+</Steps>
+
+`make graph` doesn't check CAN or build anything - it assumes `make launch` already did. If the bus isn't up, `make can-setup` brings it up on its own.
+
+## Watching the bus directly
+
+When you suspect the problem is below ROS, watch the raw CAN traffic:
 
 ```bash title="Terminal 2"
 candump any
 ```
 
-<Callout type="info">
-    Using `any` instead of a specific interface name means this keeps working no matter which CAN
-    line (`can0`, `can1`, ...) ends up carrying traffic. Leave it running; it'll pick up traffic as
-    soon as the interface comes up in the next step.
-</Callout>
-
-Back in the first terminal, bring the CAN interface up:
-
-```bash title="Terminal 1"
-make can-setup
-```
-
-This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
-
-## Build and launch
-
-<Steps>
-    <Step>
-        Build and attach to the rover's container:
-
-        ```bash title="Terminal 1"
-        make container
-        ```
-    </Step>
-    <Step>
-        Inside the container, build the ROS 2 workspace:
-
-        ```bash title="Terminal 1 (in container)"
-        make build
-        ```
-    </Step>
-    <Step>
-        Launch the full node graph:
-
-        ```bash title="Terminal 1 (in container)"
-        make launch
-        ```
-    </Step>
-
-</Steps>
-
-## Confirm it came up
-
-Rather than reading the whole launch log and knowing which lines matter, look at the summary the `supervisor` node prints once every module has checked in:
-
-```text
-[INFO] [supervisor]: viator status
-  drivebase                ok         awaiting commands
-  can_rmdx8                ok         6 motors on can1
-  mission_control_updater  ok
-  arm                      ok         mode disabled
-  heartbeat                ok         awaiting mission control
-  camera                   ok         2 cameras: [0, 1]
-  rosbridge                ok         discovered
-  rosapi                   ok         discovered
-  all modules ready
-```
-
-After that it only speaks up when something changes state, so a quiet log means a healthy rover.
-
-Each module reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. `Launching <node>` is printed at the top of a constructor and tells you nothing about whether the node works.
-
-<Callout type="success" title="It's working">
-    `candump` should now show a steady stream of CAN traffic, and mission control's websocket
-    indicator should be green - the full chain from rover hardware to mission control is live.
-</Callout>
-
-## Watch it with the dashboard
-
-`make launch` prints to the terminal it's running in. For a readable live view, open the dashboard in a second terminal:
-
-```bash title="Terminal 2 (in container)"
-make tui
-```
-
-Module status sits on top, the log underneath, filtered and rate-aware.
-
-| Key | Does                                                     |
-| --- | -------------------------------------------------------- |
-| `p` | Pause the log. You cannot read a log that is moving      |
-| `f` | Cycle the minimum severity shown                         |
-| `/` | Filter by text                                           |
-| `c` | Copy the visible log to your clipboard                   |
-| `s` | Save the visible log to a file under `~/.ros/viator-tui` |
-| `q` | Quit                                                     |
-
-The dashboard only observes. It attaches to a rover that is already running, so opening and closing it never affects the rover, and losing your SSH session can't take the node graph down with it.
-
-<Callout type="info" title="Copy works over SSH">
-    `c` copies to the clipboard of the machine you are sitting at, not the rover's, using OSC 52. If
-    you are inside tmux it needs `set -g set-clipboard on` to pass the sequence through.
-</Callout>
-
-<Callout type="idea" title="Logs that never reach the dashboard">
-    The dashboard reads `/rosout`, so it shows anything logged through ROS. Output that bypasses ROS
-    entirely - a Python traceback, or OpenCV's own C++ warnings - only appears on the terminal
-    running `make launch`, or in the journal on a deployed rover.
-</Callout>
-
-<Callout type="idea" title="Reconnecting later">
-    Once the container exists, `make connect` re-attaches to it without rebuilding - use that
-    instead of `make container` for subsequent sessions.
-</Callout>
+`any` rather than a specific interface means this keeps working no matter which CAN line ends up carrying traffic, and it picks up traffic as soon as the interface comes up.
 
 <Accordions>
-    <Accordion title="candump shows no traffic">
-        The CAN interface hasn't been brought up yet - run `make can-setup` first.
+    <Accordion title="can1: interface not present">
+        There is no CAN hardware on this host, or the transceiver isn't powered. On the Orin, check
+        the harness at the expansion header (see [Viator Orin](./orin.mdx)) and `dmesg` for the
+        `mttcan` driver. On a laptop this is expected - the rover needs real hardware to run.
+    </Accordion>
+    <Accordion title="The node graph shut itself down during startup">
+        A node that commands motors failed, and the launch file takes the whole graph down when
+        that happens so the motors stop rather than holding their last setpoint. `make launch`
+        prints the first error it finds; the full output is in `log/launch-latest.log`.
+    </Accordion>
+    <Accordion title="The build failed and I can't see why">
+        Re-run with `make launch FLAGS=-v` to stream the build instead of collapsing it. On a
+        failure the path to the full captured output is printed too.
     </Accordion>
     <Accordion title="Mission control's websocket indicator stays red">
-        Double check the websocket address in mission control's settings matches the rover's current
-        IP, and that `make launch` is actually running (it's what starts `rosbridge_server`).
+        Check the address in mission control's settings matches the rover's current IP, and that
+        `make status` reports `rosbridge listening on 9090`. If it doesn't, the graph isn't running.
     </Accordion>
-    <Accordion title="A module shows as degraded or stale">
-        `degraded` means the node is running but something is wrong, and the detail column says
-        what. `stale` means it stopped reporting altogether, which means it died or hung - check the
-        log for what it said last.
+    <Accordion title="candump shows no traffic">
+        The bus isn't up, or nothing is driving it. `make status` tells you which: it reports the
+        interface state and which motors are answering separately.
     </Accordion>
-    <Accordion title="can_rmdx8 reports dropped packets">
-        It reports an aggregate every 5 seconds, like `CAN degraded: 284/584 polls dropped in 5.0s
-        (m21:48 m22:47 m23:50 ...)`. Spread evenly across all six motors points at the bus or the
-        driver; concentrated on one motor points at that motor's wiring.
+    <Accordion title="Permission denied talking to Docker">
+        Your user isn't in the `docker` group. `sudo usermod -aG docker $USER`, then log out and
+        back in.
     </Accordion>
-    <Accordion title="The whole graph shut down on its own">
-        A node that commands motors exited, and the launch file deliberately takes everything down
-        when that happens so the motors stop rather than holding their last setpoint. Scroll up for
-        the node that failed first.
+    <Accordion title="A module shows degraded or stale">
+        See [the dashboard page](./dashboard.mdx) - it covers every state and what to do about it.
     </Accordion>
 </Accordions>

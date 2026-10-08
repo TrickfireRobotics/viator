@@ -1,0 +1,183 @@
+---
+title: The Dashboard
+description: How to read and drive Viator's terminal dashboard - module status, the live log, and every key it responds to.
+slug: dashboard
+---
+
+The dashboard is the terminal UI that answers "is the rover healthy, and if not, what broke". Module status sits on top, the live log underneath. It is what `make launch` opens for you, and you can open it on its own at any time against a rover that is already running.
+
+It is read-only. It subscribes to two topics and draws them. It cannot command the rover, and nothing you press in it can move a motor.
+
+## Opening it
+
+```bash title="Terminal (on the rover)"
+make launch
+```
+
+That brings the whole rover up and leaves you in the dashboard. See [Launching the Rover](./launching.mdx) for what the other four phases do.
+
+To look at a rover that is already running, from a second terminal or after a dropped connection:
+
+```bash title="Terminal 2"
+make tui
+```
+
+Both work from the rover's host and from inside the dev container; the scripts find the container themselves.
+
+<Callout type="info" title="The two have different lifetimes">
+    `make tui` only observes - closing it, or losing your SSH session, leaves the rover running.
+    `make launch` owns the node graph it started, so quitting the dashboard there stops the rover.
+    That is deliberate: on a bench, a dropped connection should stop the motors, not leave them
+    spinning.
+</Callout>
+
+## The layout
+
+```text
+ ⭘                                      viator                                  20:05:00
+╭─ modules  4 reporting ────────────────────────────────────────────────────────────────╮
+│  module     state     detail                                                          │
+│  camera     ok        2 cameras: [0, 1]                                               │
+│  can_rmdx8  degraded  284/584 polls dropped in 5.0s                                   │
+│  drivebase  ok        awaiting commands                                               │
+│  heartbeat  starting                                                                  │
+╰───────────────────────────────────────────────────────────────────────────────────────╯
+╭─ log  info+ ──────────────────────────────────────────────────────────────────────────╮
+│ 20:05:00 INFO  drivebase  drivebase ready                                             │
+│ 20:05:00 WARN  can_rmdx8  CAN degraded: 284/584 polls dropped in 5.0s                 │
+│                                                                                       │
+╰───────────────────────────────────────────────────────────────────────────────────────╯
+ q quit  p pause  f level  / search  c copy  s save  ? help
+```
+
+The two pane borders carry live state, so the pane titles are worth reading:
+
+- **`modules  4 reporting`** - how many modules have checked in at all. If a module you expect is missing from the table entirely, it never got far enough to report.
+- **`log  info+`** - the active filter. It also shows your text filter in quotes and the word `PAUSED` when the log is frozen, so there is never a mystery about why the log looks empty or frozen.
+
+Press `?` at any time for the same reference this page gives, inside the app.
+
+## Reading the modules pane
+
+Each node reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. A `Launching <node>` line in the log is printed at the top of a constructor and tells you nothing about whether the node works; this table is the thing that does.
+
+| State      | Means                                                            | What to do                                                             |
+| ---------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `starting` | Constructed, but hasn't finished bringing itself up              | Wait a few seconds. If it sticks here, it's hung in its constructor    |
+| `ok`       | Started and doing its job                                        | Nothing                                                                |
+| `degraded` | Running, but something is wrong                                  | Read the detail column, it says what                                   |
+| `failed`   | Running, but can't do its job at all                             | Read the detail column, then the log for that module                   |
+| `stale`    | Stopped reporting for three seconds, so it died or hung          | Read the last thing it logged, that's where it went                    |
+
+The detail column is the module's own one-line summary: how many motors it found, how many cameras, whether mission control is connected. That is usually the fastest answer to "is this plugged in".
+
+<Callout type="success" title="A healthy rover is boring">
+    Every module `ok`, and a log that scrolls slowly. Modules only republish their state once a
+    second and only log when something changes, so a quiet dashboard is the goal, not a sign that
+    something has stopped working.
+</Callout>
+
+## Reading the log pane
+
+Each line is `time`, `level`, `node`, `message`, and the level is colour-coded. The pane is the `/rosout` topic rather than scraped terminal output, so the fields arrive already separated and the node column is reliable.
+
+The log defaults to `info+`. Press `f` to walk the threshold up to `warn+` and `error`, then round to `debug+`.
+
+<Callout type="idea" title="Pause first, then read">
+    A log that is moving is a log you cannot read. Press `p` the moment you see something you want
+    to look at. Nothing is dropped while paused - up to 5000 lines are kept in the buffer either
+    way, and unpausing redraws the pane from it.
+</Callout>
+
+## Keys
+
+| Key   | Does                                                                      |
+| ----- | ------------------------------------------------------------------------- |
+| `p`   | Pause the log. Nothing is lost while paused                               |
+| `f`   | Cycle the minimum severity shown: `info+` → `warn+` → `error` → `debug+`  |
+| `/`   | Filter the log by text. Enter applies it                                  |
+| `esc` | Close the help panel, or clear the text filter                            |
+| `c`   | Copy every visible line to your clipboard                                 |
+| `s`   | Save every visible line to a file under `~/.ros/viator-tui`               |
+| `?`   | Show the help panel                                                       |
+| `q`   | Quit                                                                      |
+
+`c` and `s` both act on what is currently visible, so set your level and text filter first and you get exactly the lines you wanted rather than the whole buffer.
+
+<Callout type="info" title="Copy works over SSH">
+    `c` copies to the clipboard of the machine you are sitting at, not the rover's, using OSC 52 -
+    the escape sequence is interpreted by your terminal emulator at your end. Inside tmux it needs
+    `set -g set-clipboard on` to pass the sequence through.
+</Callout>
+
+## Working out what went wrong
+
+The order that gets you to an answer fastest:
+
+<Steps>
+    <Step>
+        **Look at the modules table first.** One module `degraded` or `failed` with the rest `ok`
+        points straight at that module. Everything `stale` at once means the whole graph went down,
+        not that eight things broke.
+    </Step>
+    <Step>
+        **Press `p`** so the log stops moving.
+    </Step>
+    <Step>
+        **Press `f` twice** to get to `warn+`. On a rover that is misbehaving the interesting lines
+        are warnings and errors, and at `info+` they scroll past surrounded by routine chatter.
+    </Step>
+    <Step>
+        **Press `/` and filter by the module name** from the table. Now you are looking at only
+        what that module said.
+    </Step>
+    <Step>
+        **Press `s`** to keep it. A failed run is worth a file; you will want it again in twenty
+        minutes when you are explaining what happened.
+    </Step>
+</Steps>
+
+## What the dashboard can't show you
+
+The log pane is `/rosout`, so it has everything logged through a ROS logger and nothing that bypassed one. A Python traceback, or OpenCV's own C++ warnings, go to the launch's stdout instead:
+
+| How you started it   | Where that output goes       |
+| -------------------- | ---------------------------- |
+| `make launch`        | `log/launch-latest.log`      |
+| `make graph`         | the terminal it's running in |
+| systemd on the rover | `journalctl -u viator -f`    |
+
+Press `?` and the help panel names the file in use for the current session. This is the single most common reason a crash "isn't in the log": it is, just not in that log.
+
+<Accordions>
+    <Accordion title="The dashboard is empty and nothing is arriving">
+        Nothing is publishing, which means the node graph isn't running. Check with `make status`,
+        and if you started it with `make launch` read the tail of `log/launch-latest.log` - the
+        graph failing on startup is the usual cause.
+    </Accordion>
+    <Accordion title="Every module shows stale at once">
+        The graph shut down underneath the dashboard. A node that commands motors exited and the
+        launch file deliberately takes everything down when that happens, so the motors stop rather
+        than holding their last setpoint. Scroll back for the node that failed first; the dashboard
+        keeps its buffer, so the evidence is still there.
+    </Accordion>
+    <Accordion title="A module is missing from the table entirely">
+        It never finished starting, so it never reported. Nodes report once their constructor
+        completes, so a module that is absent rather than `starting` usually threw on the way up -
+        that traceback is in the launch output, not the log pane.
+    </Accordion>
+    <Accordion title="can_rmdx8 says polls dropped">
+        It reports an aggregate every five seconds, like `CAN degraded: 284/584 polls dropped in
+        5.0s (m21:48 m22:47 m23:50 ...)`. Spread evenly across all six motors points at the bus or
+        the driver; concentrated on one motor points at that motor's wiring.
+    </Accordion>
+    <Accordion title="The log is frozen and p doesn't help">
+        Check the log pane's border for the word `PAUSED`. If it isn't there, the log genuinely has
+        nothing new, which is normal - modules only log on a change of state.
+    </Accordion>
+    <Accordion title="The terminal is left in a mess after a crash">
+        The dashboard runs in the alternate screen with echo off, so a hard kill can leave the
+        shell invisible. `make launch` restores it on the way out, but if you killed it some other
+        way, `reset` fixes it.
+    </Accordion>
+</Accordions>

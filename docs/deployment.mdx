@@ -6,11 +6,11 @@ slug: deployment
 
 This page covers getting Viator onto the rover as a single self-contained artifact. It is the competition path: build once, verify, carry the result on a USB stick, and run it with no network, no registry, and nothing compiling on the Orin.
 
-The [dev container](./getting-started.mdx) and the [launch workflow](./launching.mdx) are still how you develop day to day. This is about the thing you deploy.
+The [dev container](./getting-started.mdx) and [`make launch`](./launching.mdx) are still how you develop day to day. This is about the thing you deploy.
 
 ## Why an image rather than the source
 
-The rover used to be deployed by syncing the repo to the Orin and running `make container`, which built the Docker image **on the rover, at deploy time**. That build reaches out to apt mirrors, PyPI, nodesource, and GitHub, and compiles the RMD-X8 driver from source. In the lab that's slow. In the Utah desert with no signal it doesn't work at all, and even with signal the image you build in the field is not the image you tested.
+The rover used to be deployed by syncing the repo to the Orin and building the Docker image **on the rover, at deploy time**. That build reaches out to apt mirrors, PyPI, nodesource, and GitHub, and compiles the RMD-X8 driver from source. In the lab that's slow. In the Utah desert with no signal it doesn't work at all, and even with signal the image you build in the field is not the image you tested.
 
 The `runtime` target solves this by baking the compiled workspace into the image:
 
@@ -104,23 +104,26 @@ Restarts are Docker's job rather than systemd's, so the two don't fight. The lau
 Watch what it's doing:
 
 ```bash title="Terminal (on the Orin)"
-docker logs -f viator-rover            # the node graph
-make tui                               # the dashboard, see Launching
-ls /var/log/viator                      # ROS's own log files, kept on the host
+docker logs -f viator-rover     # the node graph's raw output
+make tui                        # the dashboard
+ls /var/log/viator              # ROS's own log files, kept on the host
 ```
+
+`make tui` is the same [dashboard](./dashboard.mdx) the dev workflow uses, and it only observes, so it is safe to open and close against a running rover.
 
 ## Check it's actually ready
 
 Run this at the start of each competition day and before each run. It is the difference between finding a loose CAN connector now and finding it halfway through a scored run.
 
 ```bash title="Terminal (on the Orin)"
-make preflight
+make status
 ```
 
 ```text
-viator preflight
+  viator  preflight
 
-  [ ok ] runtime image          viator:runtime, viator:abc1234
+  [ ok ] setup                  deployed
+  [ ok ] image                  viator:runtime, viator:abc1234
   [ ok ] container              viator-rover running
   [ ok ] can1                   up at 1000000 bit/s
   [ ok ] motors                 all 6 responding
@@ -128,8 +131,10 @@ viator preflight
   [ ok ] rosbridge              listening on 9090
   [ ok ] disk                   42103 MB free on /var/log
 
-  ready - 7 checks passed
+  ready - 8 checks passed
 ```
+
+The same command works on a dev host, where it checks the dev container and `viator:dev` instead. It works out which setup it's looking at, so there is one command to remember rather than two.
 
 It exits non-zero if anything fails, so you can gate a startup script on it.
 
@@ -139,7 +144,7 @@ It exits non-zero if anything fails, so you can gate a startup script on it.
         at the Orin's expansion header (see [Viator Orin](./orin.mdx)) and at each controller. If
         none are responding, confirm `viator-can.service` ran.
     </Accordion>
-    <Accordion title="runtime image: not loaded">
+    <Accordion title="image: viator:runtime not loaded">
         The image isn't in the local Docker daemon. Either `make runtime` to build it or `make load
         ARCHIVE=...` to load it from the USB stick.
     </Accordion>
