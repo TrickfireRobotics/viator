@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# Renders `make help` from the Makefile itself.
-#
-# Targets documented with a trailing `## comment` get listed, grouped by the
-# `# --- section ---` headers they appear under, so the listing can't drift out of date
-# the way a hand-written one does.
+#@ prints a help message for the commands in this repo
 
 set -uo pipefail
 
