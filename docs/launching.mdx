@@ -11,7 +11,7 @@ cd ~/viator
 make launch
 ```
 
-This is the development workflow, where the rover builds from the source tree on its own disk. For competition, build the self-contained image and deploy that instead; see [Deploying to the Rover](./deployment.mdx).
+The rover builds from the source tree on its own disk, so `make sync` your changes over (or pull them on the rover) and relaunch.
 
 ## What `make launch` does
 
@@ -58,6 +58,23 @@ Then it hands you the dashboard. Press `?` in there for the keys, `q` to quit.
     terminal, use `make graph` and `make tui` as [two separate commands](#running-it-without-the-dashboard).
 </Callout>
 
+## Make CAN bringup automatic
+
+`make launch` brings `can1` up when it finds it down, which costs a sudo prompt every time. Do it once per rover and the bus is already up before anyone logs in:
+
+```bash title="Terminal (on the rover)"
+make can-service
+```
+
+That installs a systemd unit which runs `scripts/setup-can-network.sh` at boot, enables it, and starts it immediately. Safe to enable: it configures the interface and puts the drivebase controllers into speed mode, it does not command any motion.
+
+The unit points at the checkout it was installed from, so if the repo moves, run it again.
+
+<Callout type="idea" title="make can-setup is still there">
+    For a one-shot bringup without touching systemd - a bus that dropped mid-session, or a machine
+    you don't want to change - `make can-setup` does just the bringup.
+</Callout>
+
 ## Flags
 
 Pass these through `FLAGS=`:
@@ -91,6 +108,9 @@ make            # list every target
 | `make graph`  | Run the node graph alone, in the foreground, no dashboard              |
 | `make build`  | Build the workspace                                                    |
 | `make connect`| Get a shell in the dev container                                       |
+| `make can-service` | Make CAN bringup automatic at boot. Once per rover               |
+| `make can-setup`   | Bring the CAN bus up right now, by hand                          |
+| `make sync`   | rsync this checkout to the rover (`IP=`, `REMOTE_PATH=`)               |
 
 `status`, `stop`, `tui`, `graph` and `build` all work from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
 
@@ -121,16 +141,15 @@ make status
 ```text
   viator  preflight
 
-  [ ok ] setup                  dev
   [ ok ] image                  viator:dev
   [ ok ] container              viator running
   [ ok ] can1                   up at 1000000 bit/s
   [ ok ] motors                 all 6 responding
   [ ok ] cameras                2 video device(s): /dev/video0 /dev/video1
   [ ok ] rosbridge              listening on 9090
-  [ ok ] disk                   42103 MB free on /var/log
+  [ ok ] disk                   42103 MB free on /home/trickfire/viator
 
-  ready - 8 checks passed
+  ready - 7 checks passed
 ```
 
 It exits non-zero if anything failed, so you can gate a script on it. The `motors` check is the one worth caring about: it listens to the bus and names the CAN IDs that aren't answering, which is how you find a loose connector before a scored run rather than during one.
@@ -207,6 +226,11 @@ candump any
 `any` rather than a specific interface means this keeps working no matter which CAN line ends up carrying traffic, and it picks up traffic as soon as the interface comes up.
 
 <Accordions>
+    <Accordion title="make launch asks for sudo every time">
+        It only does that when it has to bring the bus up itself. `make can-service` installs the
+        systemd unit that does it at boot, after which `make launch` finds `can1` already up and
+        never needs root.
+    </Accordion>
     <Accordion title="can1: interface not present">
         There is no CAN hardware on this host, or the transceiver isn't powered. On the Orin, check
         the harness at the expansion header (see [Viator Orin](./orin.mdx)) and `dmesg` for the

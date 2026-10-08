@@ -23,7 +23,6 @@ viator/
 │   ├── viator_launch/    # Top-level launch file
 │   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
 ├── scripts/              # Everything the Makefile runs (see below)
-├── deploy/               # Runtime compose file and systemd units
 ├── .devcontainer/        # Dockerfile + compose file for the container
 └── Makefile              # the entry point; `make` lists every target
 ```
@@ -32,7 +31,7 @@ viator/
 
 ## `scripts/` — the workflow
 
-Every `make` target is a thin wrapper over a script here, so anything can also be run directly. `scripts/lib/common.sh` holds the shared output helpers and environment checks, which is why `make launch`, `make status` and `make deploy` all report in the same format.
+Every `make` target is a thin wrapper over a script here, so anything can also be run directly. `scripts/lib/common.sh` holds the shared output helpers and environment checks, which is why `make launch` and `make status` report in the same format.
 
 | Script | Purpose |
 | --- | --- |
@@ -42,8 +41,9 @@ Every `make` target is a thin wrapper over a script here, so anything can also b
 | `graph.sh` | The node graph alone, in the foreground. |
 | `tui.sh` | The dashboard alone, attached to a rover that is already running. |
 | `stop.sh`, `preflight.sh` | Stop the graph; check the rover is ready. |
-| `build.sh`, `setup-can-network.sh` | `colcon build`; CAN interface bringup and drivebase enable. |
-| `build-runtime.sh`, `save-image.sh`, `load-image.sh`, `install-deploy.sh` | The deployment path, see [Deploying to the Rover](./deployment.mdx). |
+| `build.sh` | `colcon build`. |
+| `setup-can-network.sh`, `install-can-service.sh` | CAN interface bringup and drivebase enable; the systemd unit that does it at boot. |
+| `container-launch.sh`, `connect-to-container.sh`, `sync-to-orin.sh` | Container shell access and rsyncing a checkout to the rover. |
 
 Scripts that need ROS sourced re-run themselves inside the container when they're started on the host, so there is no "wrong terminal" to be in.
 

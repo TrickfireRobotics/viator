@@ -86,6 +86,7 @@ else
         sudo -v || die "could not get sudo, run 'make can-setup' by hand"
     fi
     runStep "bringing $CAN_IFACE up" ./scripts/setup-can-network.sh || die "CAN bringup failed"
+    note "'make can-service' makes this happen at boot, so it's already up next time"
 fi
 
 # ***************

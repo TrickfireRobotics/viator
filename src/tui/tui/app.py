@@ -8,8 +8,7 @@ choice here instead of something to strip.
 
 One thing `/rosout` cannot show: output that never went through a ROS logger, such as a
 Python traceback or OpenCV's own C++ warnings. Those only exist on the launch's own stdout,
-which `make launch` puts in `log/launch-latest.log` and a deployed rover puts in the
-journal (`journalctl -u viator -f`). `?` shows the path in use.
+which `make launch` puts in `log/launch-latest.log`. `?` shows the path in use.
 """
 
 import base64

@@ -1,12 +1,9 @@
-# Three stages:
+# Two stages:
 #
-#   base     everything the rover needs to run, and nothing else
-#   dev      base plus the toolchain, this is what the devcontainer uses
-#   runtime  base plus a Release build of the workspace baked in
+#   base   everything the rover needs to run, and nothing else
+#   dev    base plus the toolchain, this is what the container uses
 #
-# The point of the split is that `runtime` is a deployment artifact. It carries its own
-# compiled workspace, so nothing is cloned, pip installed or compiled on the Orin at
-# deploy time, and the image that gets tested is byte-for-byte the image that drives.
+# Source comes in over a bind mount either way, so nothing is baked into the image.
 
 # Pinning the full tag rather than `ros:humble` so the Ubuntu release is explicit. To pin
 # harder, resolve a digest with
@@ -14,7 +11,7 @@
 # and replace this with `ros@sha256:...`.
 FROM ros:humble-ros-base-jammy AS base
 
-# ---- runtime system packages ----
+# ---- system packages ----
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install --no-install-recommends -y \
@@ -103,33 +100,3 @@ COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
 ENV VIATOR_CONTAINER=dev
 
 USER trickfire
-
-# ---------------------------------------------------------------------------
-# runtime: the deployment artifact. Workspace is compiled in, no bind mount.
-# ---------------------------------------------------------------------------
-FROM base AS runtime
-
-WORKDIR /opt/viator
-
-COPY src/ /opt/viator/src/
-
-# --merge-install for one flat tree, and no --symlink-install: symlinks would point back
-# at a source tree that doesn't exist on the rover. Release rather than the Debug the dev
-# build uses, because this one actually drives.
-RUN . "/opt/ros/$ROS_DISTRO/setup.sh" \
-    && colcon build \
-    --merge-install \
-    --base-paths . \
-    --cmake-args -DCMAKE_BUILD_TYPE=Release \
-    && rm -rf build log \
-    && chown -R trickfire:trickfire /opt/viator
-
-ENV VIATOR_CONTAINER=runtime
-
-COPY deploy/entrypoint.sh /usr/local/bin/viator-entrypoint
-RUN chmod +x /usr/local/bin/viator-entrypoint
-
-USER trickfire
-
-ENTRYPOINT ["/usr/local/bin/viator-entrypoint"]
-CMD ["launch"]

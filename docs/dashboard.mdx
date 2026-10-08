@@ -141,11 +141,10 @@ The order that gets you to an answer fastest:
 
 The log pane is `/rosout`, so it has everything logged through a ROS logger and nothing that bypassed one. A Python traceback, or OpenCV's own C++ warnings, go to the launch's stdout instead:
 
-| How you started it   | Where that output goes       |
-| -------------------- | ---------------------------- |
-| `make launch`        | `log/launch-latest.log`      |
-| `make graph`         | the terminal it's running in |
-| systemd on the rover | `journalctl -u viator -f`    |
+| How you started it | Where that output goes       |
+| ------------------ | ---------------------------- |
+| `make launch`      | `log/launch-latest.log`      |
+| `make graph`       | the terminal it's running in |
 
 Press `?` and the help panel names the file in use for the current session. This is the single most common reason a crash "isn't in the log": it is, just not in that log.
 

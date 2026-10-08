@@ -2,8 +2,8 @@
 The ROS side of the dashboard.
 
 This is a read-only observer, deliberately not launched with the rover. The rover runs
-under its own launch/systemd lifecycle and this attaches to look at it, so closing the
-dashboard, losing SSH, or crashing it cannot take the rover down with it.
+under its own launch lifecycle and this attaches to look at it, so closing the dashboard,
+losing SSH, or crashing it cannot take the rover down with it.
 
 rclpy and Textual each want to own an event loop, so rather than trying to merge them the
 executor is spun on its own thread and results are handed over through plain callables.

@@ -1,71 +1,33 @@
 #!/usr/bin/env bash
 # Checks the rover is actually ready, rather than looking ready.
 #
-# Run this at the start of each competition day and before each run. It answers the
-# questions you otherwise find out the answer to halfway through a run: is the image the
-# one we tested, is CAN up, are the motors answering, are the cameras there, is rosbridge
-# listening.
-#
-# Works for both setups. On a deployed rover it looks for the runtime image and the
-# viator-rover container; on a dev host it looks for the dev container instead. It checks
-# whichever it finds, so there is one `make status` to remember rather than two.
+# Run this before a run. It answers the questions you otherwise find out the answer to
+# halfway through: is CAN up, are the motors answering, are the cameras there, is
+# rosbridge listening.
 #
 # Exits non-zero if anything is wrong, so it can gate a script.
 
 set -uo pipefail
 
-# install-deploy.sh copies lib/ alongside this file into /opt/viator-deploy, so this
-# resolves on a deployed rover as well as in a checkout.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 readonly EXPECTED_MOTORS=(155 156 157 158 159 15A)
 readonly ROSBRIDGE_PORT=9090
 
-# Deployed rover first, dev host second.
-readonly DEPLOY_CONTAINER="viator-rover"
-readonly DEV_CONTAINER="viator"
-
 banner "preflight"
 
-containerState() {
-    local state
-    state="$(docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null | tr -d '[:space:]')"
-    printf '%s' "${state:-absent}"
-}
-
 # ---- image and container ----
-# Which setup this is gets decided by which container exists, so the two checks agree.
-deploy_state="$(containerState "$DEPLOY_CONTAINER")"
-dev_state="$(containerState "$DEV_CONTAINER")"
-
-if [ "$deploy_state" != "absent" ] || ! docker image inspect viator:dev >/dev/null 2>&1; then
-    mode="deployed"
-    container="$DEPLOY_CONTAINER"
-    container_state="$deploy_state"
-    image="viator:runtime"
-    image_hint="not loaded, run 'make load ARCHIVE=...' or 'make runtime'"
-    start_hint="sudo systemctl start viator"
+if docker image inspect viator:dev >/dev/null 2>&1; then
+    ok "image" "$(docker image inspect viator:dev --format '{{join .RepoTags ", "}}')"
 else
-    mode="dev"
-    container="$DEV_CONTAINER"
-    container_state="$dev_state"
-    image="viator:dev"
-    image_hint="not built, run 'make launch'"
-    start_hint="make launch"
+    bad "image" "viator:dev not built, run 'make launch'"
 fi
 
-ok "setup" "$mode"
-
-if docker image inspect "$image" >/dev/null 2>&1; then
-    ok "image" "$(docker image inspect "$image" --format '{{join .RepoTags ", "}}')"
-else
-    bad "image" "$image $image_hint"
-fi
-
-case "$container_state" in
-running) ok "container" "$container running" ;;
-absent) warn "container" "$container not created ($start_hint)" ;;
-*) bad "container" "$container is $container_state" ;;
+container_state="$(docker inspect -f '{{.State.Status}}' "$COMPOSE_SERVICE" 2>/dev/null | tr -d '[:space:]')"
+case "${container_state:-absent}" in
+running) ok "container" "$COMPOSE_SERVICE running" ;;
+absent) warn "container" "$COMPOSE_SERVICE not created (run 'make launch')" ;;
+*) bad "container" "$COMPOSE_SERVICE is $container_state" ;;
 esac
 
 # ---- CAN interface ----
@@ -74,7 +36,7 @@ if canExists; then
         bitrate="$(canBitrate)"
         ok "$CAN_IFACE" "up${bitrate:+ at ${bitrate} bit/s}"
     else
-        bad "$CAN_IFACE" "exists but is down (run 'make can-setup')"
+        bad "$CAN_IFACE" "down - 'make can-setup' now, 'make can-service' for every boot"
     fi
 else
     bad "$CAN_IFACE" "interface not present"
@@ -127,8 +89,9 @@ else
 fi
 
 # ---- disk ----
-log_dir="/var/log"
-[ -d /var/log/viator ] && log_dir="/var/log/viator"
+# ROS writes its logs under the user's home inside the container, which is the bind
+# mount, so the partition that matters is the one the checkout is on.
+log_dir="$REPO_ROOT"
 avail_kb="$(df --output=avail "$log_dir" 2>/dev/null | tail -1 | tr -d ' ')"
 if [ -z "$avail_kb" ]; then
     warn "disk" "could not read free space on $log_dir"

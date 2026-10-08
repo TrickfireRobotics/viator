@@ -4,8 +4,8 @@
 # Source it, don't run it:
 #   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 #
-# Every script that reports progress uses the same two-column layout, so `make launch`,
-# `make status` and `make deploy` read as one tool rather than three:
+# Every script that reports progress uses the same two-column layout, so `make launch` and
+# `make status` read as one tool rather than two:
 #
 #   [ ok ] can1                   up at 1000000 bit/s
 #   [FAIL] rosbridge              nothing listening on 9090
@@ -93,8 +93,8 @@ die() {
 # Environment
 # ***************
 
-# True inside either of the project's containers. The dev and runtime images both set
-# VIATOR_CONTAINER; /.dockerenv is the fallback for an image built before that existed.
+# True inside the container. The image sets VIATOR_CONTAINER; /.dockerenv is the fallback
+# for an image built before that existed.
 inContainer() {
     [ -n "${VIATOR_CONTAINER:-}" ] || [ -f /.dockerenv ]
 }

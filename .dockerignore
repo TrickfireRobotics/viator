@@ -1,5 +1,5 @@
-# Build output: the runtime image builds its own, and shipping the host's would both
-# bloat the context and risk baking in a stale or wrong-architecture build.
+# Build output. The container bind-mounts the source and builds in place, so sending
+# the host's copy would only bloat the build context.
 build/
 install/
 log/

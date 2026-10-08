@@ -20,4 +20,3 @@ It checks the host, brings the CAN bus up, builds the container and the ROS 2 wo
 - [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) - the one command and everything around it
 - [The Dashboard](https://docs.trickfirerobotics.com/viator/dashboard) - how to read and drive the terminal UI
 - [Architecture](https://docs.trickfirerobotics.com/viator/architecture) - architecture decisions and explanations
-- [Deploying to the Rover](https://docs.trickfirerobotics.com/viator/deployment) - the competition image and systemd
