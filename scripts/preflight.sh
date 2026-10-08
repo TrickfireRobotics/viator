@@ -6,78 +6,75 @@
 # one we tested, is CAN up, are the motors answering, are the cameras there, is rosbridge
 # listening.
 #
+# Works for both setups. On a deployed rover it looks for the runtime image and the
+# viator-rover container; on a dev host it looks for the dev container instead. It checks
+# whichever it finds, so there is one `make status` to remember rather than two.
+#
 # Exits non-zero if anything is wrong, so it can gate a script.
 
 set -uo pipefail
 
+# install-deploy.sh copies lib/ alongside this file into /opt/viator-deploy, so this
+# resolves on a deployed rover as well as in a checkout.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
 readonly EXPECTED_MOTORS=(155 156 157 158 159 15A)
-readonly CAN_IFACE="can1"
 readonly ROSBRIDGE_PORT=9090
-readonly CONTAINER="viator-rover"
 
-pass_count=0
-fail_count=0
+# Deployed rover first, dev host second.
+readonly DEPLOY_CONTAINER="viator-rover"
+readonly DEV_CONTAINER="viator"
 
-if [ -t 1 ]; then
-    readonly C_GREEN=$'\033[0;32m'
-    readonly C_RED=$'\033[0;31m'
-    readonly C_YELLOW=$'\033[0;33m'
-    readonly C_OFF=$'\033[0m'
+banner "preflight"
+
+containerState() {
+    local state
+    state="$(docker inspect -f '{{.State.Status}}' "$1" 2>/dev/null | tr -d '[:space:]')"
+    printf '%s' "${state:-absent}"
+}
+
+# ---- image and container ----
+# Which setup this is gets decided by which container exists, so the two checks agree.
+deploy_state="$(containerState "$DEPLOY_CONTAINER")"
+dev_state="$(containerState "$DEV_CONTAINER")"
+
+if [ "$deploy_state" != "absent" ] || ! docker image inspect viator:dev >/dev/null 2>&1; then
+    mode="deployed"
+    container="$DEPLOY_CONTAINER"
+    container_state="$deploy_state"
+    image="viator:runtime"
+    image_hint="not loaded, run 'make load ARCHIVE=...' or 'make runtime'"
+    start_hint="sudo systemctl start viator"
 else
-    readonly C_GREEN=""
-    readonly C_RED=""
-    readonly C_YELLOW=""
-    readonly C_OFF=""
+    mode="dev"
+    container="$DEV_CONTAINER"
+    container_state="$dev_state"
+    image="viator:dev"
+    image_hint="not built, run 'make launch'"
+    start_hint="make launch"
 fi
 
-green() { printf '%s%s%s' "$C_GREEN" "$1" "$C_OFF"; }
-red() { printf '%s%s%s' "$C_RED" "$1" "$C_OFF"; }
-yellow() { printf '%s%s%s' "$C_YELLOW" "$1" "$C_OFF"; }
+ok "setup" "$mode"
 
-ok() {
-    printf '  [%s] %-22s %s\n' "$(green ' ok ')" "$1" "${2:-}"
-    pass_count=$((pass_count + 1))
-}
-
-bad() {
-    printf '  [%s] %-22s %s\n' "$(red 'FAIL')" "$1" "${2:-}"
-    fail_count=$((fail_count + 1))
-}
-
-warn() {
-    printf '  [%s] %-22s %s\n' "$(yellow 'warn')" "$1" "${2:-}"
-}
-
-echo
-echo "viator preflight"
-echo
-
-# ---- image ----
-if docker image inspect viator:runtime >/dev/null 2>&1; then
-    tags="$(docker image inspect viator:runtime --format '{{join .RepoTags ", "}}')"
-    ok "runtime image" "$tags"
+if docker image inspect "$image" >/dev/null 2>&1; then
+    ok "image" "$(docker image inspect "$image" --format '{{join .RepoTags ", "}}')"
 else
-    bad "runtime image" "viator:runtime not loaded (./scripts/load-image.sh)"
+    bad "image" "$image $image_hint"
 fi
 
-# ---- container ----
-state="$(docker inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null | tr -d '[:space:]')"
-[ -z "$state" ] && state="absent"
-
-case "$state" in
-running) ok "container" "$CONTAINER running" ;;
-absent) warn "container" "$CONTAINER not created (sudo systemctl start viator)" ;;
-*) bad "container" "$CONTAINER is $state" ;;
+case "$container_state" in
+running) ok "container" "$container running" ;;
+absent) warn "container" "$container not created ($start_hint)" ;;
+*) bad "container" "$container is $container_state" ;;
 esac
 
 # ---- CAN interface ----
-if ip link show "$CAN_IFACE" >/dev/null 2>&1; then
-    operstate="$(cat "/sys/class/net/${CAN_IFACE}/operstate" 2>/dev/null || echo unknown)"
-    bitrate="$(ip -details link show "$CAN_IFACE" 2>/dev/null | grep -oP 'bitrate \K[0-9]+' || true)"
-    if [ "$operstate" = "up" ]; then
+if canExists; then
+    if canIsUp; then
+        bitrate="$(canBitrate)"
         ok "$CAN_IFACE" "up${bitrate:+ at ${bitrate} bit/s}"
     else
-        bad "$CAN_IFACE" "exists but is $operstate (sudo systemctl start viator-can)"
+        bad "$CAN_IFACE" "exists but is down (run 'make can-setup')"
     fi
 else
     bad "$CAN_IFACE" "interface not present"
@@ -86,7 +83,7 @@ fi
 # ---- motors ----
 # Listen briefly and see which of the drivebase controllers are actually talking. This is
 # the check that catches a loose connector, which nothing else here will.
-if command -v candump >/dev/null 2>&1 && [ -d "/sys/class/net/${CAN_IFACE}" ]; then
+if command -v candump >/dev/null 2>&1 && canExists; then
     traffic="$(timeout 2 candump -n 200 -T 1500 "$CAN_IFACE" 2>/dev/null || true)"
     if [ -z "$traffic" ]; then
         warn "motors" "no CAN traffic in 2s (is the rover software running?)"
@@ -123,27 +120,31 @@ if command -v ss >/dev/null 2>&1; then
     if ss -ltn 2>/dev/null | grep -q ":${ROSBRIDGE_PORT}\b"; then
         ok "rosbridge" "listening on ${ROSBRIDGE_PORT}"
     else
-        bad "rosbridge" "nothing listening on ${ROSBRIDGE_PORT}"
+        bad "rosbridge" "nothing listening on ${ROSBRIDGE_PORT} (is the graph running?)"
     fi
 else
     warn "rosbridge" "ss unavailable, skipped"
 fi
 
 # ---- disk ----
-avail_kb="$(df --output=avail /var/log 2>/dev/null | tail -1 | tr -d ' ')"
-if [ -n "$avail_kb" ] && [ "$avail_kb" -lt 1048576 ]; then
-    bad "disk" "$((avail_kb / 1024)) MB free on /var/log"
+log_dir="/var/log"
+[ -d /var/log/viator ] && log_dir="/var/log/viator"
+avail_kb="$(df --output=avail "$log_dir" 2>/dev/null | tail -1 | tr -d ' ')"
+if [ -z "$avail_kb" ]; then
+    warn "disk" "could not read free space on $log_dir"
+elif [ "$avail_kb" -lt 1048576 ]; then
+    bad "disk" "$((avail_kb / 1024)) MB free on $log_dir"
 else
-    ok "disk" "$((avail_kb / 1024)) MB free on /var/log"
+    ok "disk" "$((avail_kb / 1024)) MB free on $log_dir"
 fi
 
 echo
-if [ "$fail_count" -eq 0 ]; then
-    echo "  $(green "ready") - ${pass_count} checks passed"
+if [ "$FAIL_COUNT" -eq 0 ]; then
+    echo "  $(green "ready") - ${PASS_COUNT} checks passed"
     echo
     exit 0
 fi
 
-echo "  $(red "NOT ready") - ${fail_count} failed, ${pass_count} passed"
+echo "  $(red "NOT ready") - ${FAIL_COUNT} failed, ${PASS_COUNT} passed"
 echo
 exit 1

@@ -1,54 +1,72 @@
-.PHONY: build clean launch tui container connect can-setup sync format hooks \
-	runtime save load deploy preflight
+# Every target is a thin wrapper over a script in scripts/, so anything here can also be
+# run directly. Comments starting with `##` become the `make help` listing.
 
-build:
-	./scripts/build.sh
+.PHONY: help launch stop status tui graph build clean container connect can-setup sync \
+	format hooks runtime save load deploy preflight
 
-clean:
-	rm -rf build install log
+.DEFAULT_GOAL := help
 
-launch:
-	./scripts/launch.sh
+# --- running the rover ---
 
-tui:
-	./scripts/tui.sh
+help: ## show this list
+	@./scripts/help.sh $(MAKEFILE_LIST)
 
-# --- deployment ---
+launch: ## bring everything up and open the dashboard (the one you want)
+	@./scripts/launch.sh $(FLAGS)
 
-runtime:
-	./scripts/build-runtime.sh
+stop: ## stop the node graph
+	@./scripts/stop.sh $(FLAGS)
 
-save:
-	./scripts/save-image.sh $(OUT)
+status: ## check the rover is actually ready
+	@./scripts/preflight.sh
 
-load:
-	./scripts/load-image.sh $(ARCHIVE)
+tui: ## open the dashboard against a rover that is already running
+	@./scripts/tui.sh
 
-deploy:
-	sudo ./scripts/install-deploy.sh
-
-preflight:
-	./scripts/preflight.sh
+graph: ## run the node graph alone, in the foreground (no dashboard)
+	@./scripts/graph.sh
 
 # --- development ---
 
-container:
-	./scripts/container-launch.sh $(filter-out $@,$(MAKECMDGOALS))
+build: ## build the ROS 2 workspace
+	@./scripts/build.sh
 
-connect:
-	./scripts/connect-to-container.sh
+clean: ## delete colcon's build output
+	rm -rf build install log
 
-can-setup:
-	./scripts/setup-can-network.sh
+container: ## build and attach to the dev container
+	@./scripts/container-launch.sh $(FLAGS)
 
-sync:
-	./scripts/sync-to-orin.sh
+connect: ## attach a shell to the running dev container
+	@./scripts/connect-to-container.sh
 
-format:
+can-setup: ## bring the CAN bus up by hand
+	@./scripts/setup-can-network.sh
+
+sync: ## rsync this checkout to the rover (IP=, REMOTE_PATH=)
+	@./scripts/sync-to-orin.sh
+
+format: ## format python, shell, markdown and json
 	ruff format src
 	ruff check --fix src
 	shfmt -i 4 -s -w scripts/ .devcontainer/ deploy/
 	npx -y prettier@latest --write "**/*.{md,json}"
 
-hooks:
+hooks: ## install the pre-commit hooks
 	pre-commit install
+
+# --- deployment ---
+
+runtime: ## build the self-contained runtime image
+	@./scripts/build-runtime.sh
+
+save: ## write the runtime image to a tarball (OUT=)
+	@./scripts/save-image.sh $(OUT)
+
+load: ## load a runtime image tarball (ARCHIVE=)
+	@./scripts/load-image.sh $(ARCHIVE)
+
+deploy: ## install the compose file and systemd units on this machine
+	sudo ./scripts/install-deploy.sh
+
+preflight: status ## alias for status

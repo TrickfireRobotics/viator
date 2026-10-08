@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
+# `make launch`, from wherever you happen to be.
+#
+# On the rover's host (or your laptop), there is a container to build and a CAN bus to
+# bring up first, so this hands off to up.sh, which does the whole chain. Inside the
+# container all of that is already done, so it goes straight to the node graph plus
+# dashboard.
+#
+# One command either way. The alternative was two targets and a rule about which one to
+# use where, which is the thing this is replacing.
 
-cd "$(dirname "$0")/.."
+set -uo pipefail
 
-# enable colored logs
-export RCUTILS_COLORIZED_OUTPUT=1
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-# Trim the console log line down. The default is
-#   [{severity}] [{time}] [{name}]: {message}
-# which combined with launch's own process-name prefix gave four brackets per line. The
-# node name is the part worth keeping; wall-clock timestamps are in the log files and the
-# journal already, and the raw float the default prints isn't readable anyway.
-export RCUTILS_CONSOLE_OUTPUT_FORMAT="[{severity}] [{name}]: {message}"
+if inContainer; then
+    exec "${REPO_ROOT}/scripts/run.sh" "$@"
+fi
 
-# source ros
-source /opt/ros/$ROS_DISTRO/setup.bash
-source ./install/setup.bash
-
-# launch using ros
-ros2 launch viator_launch robot.launch.py
+exec "${REPO_ROOT}/scripts/up.sh" "$@"

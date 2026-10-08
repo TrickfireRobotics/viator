@@ -98,6 +98,10 @@ RUN pip3 install --no-cache-dir \
 
 COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
 
+# How the scripts know they are already inside the container, so `make launch` can do the
+# right thing from either side without being told which side it is on.
+ENV VIATOR_CONTAINER=dev
+
 USER trickfire
 
 # ---------------------------------------------------------------------------
@@ -119,6 +123,8 @@ RUN . "/opt/ros/$ROS_DISTRO/setup.sh" \
     --cmake-args -DCMAKE_BUILD_TYPE=Release \
     && rm -rf build log \
     && chown -R trickfire:trickfire /opt/viator
+
+ENV VIATOR_CONTAINER=runtime
 
 COPY deploy/entrypoint.sh /usr/local/bin/viator-entrypoint
 RUN chmod +x /usr/local/bin/viator-entrypoint

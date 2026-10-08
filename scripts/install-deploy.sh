@@ -25,6 +25,9 @@ install -d -m 0755 "$DEPLOY_DIR"
 install -m 0644 deploy/compose.runtime.yml "${DEPLOY_DIR}/compose.runtime.yml"
 install -m 0755 scripts/setup-can-network.sh "${DEPLOY_DIR}/setup-can-network.sh"
 install -m 0755 scripts/preflight.sh "${DEPLOY_DIR}/preflight.sh"
+# preflight.sh sources this, so it has to travel with it
+install -d -m 0755 "${DEPLOY_DIR}/lib"
+install -m 0644 scripts/lib/common.sh "${DEPLOY_DIR}/lib/common.sh"
 
 # ROS writes its own log files here; the runtime compose file bind-mounts it so they
 # survive a container restart.
