@@ -25,7 +25,7 @@ from rcl_interfaces.msg import Log
 from rich.markup import escape
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.binding import Binding
+from textual.binding import Binding, BindingType
 from textual.containers import Vertical
 from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
 
@@ -174,7 +174,7 @@ class ViatorTui(App[None]):
     }
     """
 
-    BINDINGS: ClassVar[list[Binding]] = [
+    BINDINGS: ClassVar[list[BindingType]] = [
         Binding("q", "quit", "quit"),
         Binding("p", "toggle_pause", "pause"),
         Binding("f", "cycle_level", "level"),
