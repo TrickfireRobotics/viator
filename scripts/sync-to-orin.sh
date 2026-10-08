@@ -6,9 +6,13 @@
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+requireNotOrin "this would rsync the Orin onto itself"
+
 REMOTE_IP="${IP:-192.168.0.112}"
 REMOTE_PATH="${REMOTE_PATH:-/home/trickfire/viator}"
-LOCAL_PATH="$(git -C "$(dirname "$0")/.." rev-parse --show-toplevel)/"
+LOCAL_PATH="${REPO_ROOT}/"
 
 # The rover has no ssh keys by design, so every sync costs a password. Multiplex
 # over one connection instead: the first sync authenticates and later ones reuse

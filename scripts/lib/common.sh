@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
-# Shared output and environment helpers for the scripts in this directory.
-#
-# Source it, don't run it:
-#   source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
-#
-# Every script that reports progress uses the same two-column layout, so `make launch` and
-# `make status` read as one tool rather than two:
-#
-#   [ ok ] can1                   up at 1000000 bit/s
-#   [FAIL] rosbridge              nothing listening on 9090
+#@ shared library for the shell scripts
 
 # shellcheck shell=bash
 
@@ -122,6 +113,54 @@ requireCommand() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# ***************
+# Platform
+# ***************
+# Several scripts only make sense on the rover's Jetson Orin (real CAN hardware, the
+# mttcan driver) or only make sense off it (syncing a checkout to the rover). Rather than
+# let those fail confusingly in the wrong place - modprobe erroring on a module that was
+# never going to exist, or rsync happily copying a tree onto itself - they check first and
+# say so.
+#
+# Two independent markers, so a future L4T release dropping one doesn't break detection:
+# /etc/nv_tegra_release is Jetson Linux's own release file, and the devicetree model string
+# is set by the bootloader directly from the board's compatible string. uname -m (aarch64)
+# is deliberately not one of them - that's true of any arm64 machine, Orin or not.
+isOrin() {
+    [ -f /etc/nv_tegra_release ] && return 0
+    tr -d '\0' </proc/device-tree/model 2>/dev/null | grep -qi 'jetson\|tegra' && return 0
+    return 1
+}
+
+# A human-readable platform string for reporting, never for branching on - isOrin is the
+# single source of truth for that. Only trusts the devicetree model when isOrin agrees
+# it's relevant: some VM hypervisors (Docker Desktop's on Apple Silicon, for one) expose a
+# devicetree model string of their own, and it describes the host, not this machine.
+platformName() {
+    if isOrin && [ -f /proc/device-tree/model ]; then
+        local model
+        model="$(tr -d '\0' </proc/device-tree/model 2>/dev/null)"
+        [ -n "$model" ] && printf '%s' "$model" && return 0
+    fi
+    # shellcheck disable=SC1091
+    (
+        . /etc/os-release 2>/dev/null
+        printf '%s' "${PRETTY_NAME:-$(uname -s)}"
+    )
+}
+
+# Call at the top of a script that only works on the rover's hardware.
+requireOrin() {
+    isOrin && return 0
+    die "this needs the rover's Orin - $(platformName) doesn't have ${1:-the hardware this talks to}"
+}
+
+# Call at the top of a script that only makes sense run from off the rover.
+requireNotOrin() {
+    isOrin || return 0
+    die "this is the Orin - ${1:-run it from your dev machine instead}"
+}
+
 # Prints a script's own header comment as its --help, so the two can't disagree. Takes the
 # script path, usually "${BASH_SOURCE[0]}".
 printHeaderHelp() {
@@ -131,7 +170,7 @@ printHeaderHelp() {
 # ***************
 # CAN bus
 # ***************
-# One definition of "is the bus up", shared by `make launch` and `make status` so the two
+# One definition of "is the bus up", shared by 'make launch' and 'make status' so the two
 # can never disagree about it.
 CAN_IFACE="${CAN_IFACE:-can1}"
 readonly CAN_IFACE

@@ -51,6 +51,12 @@ banner "bringing the rover up"
 # ***************
 step "1/5" "host"
 
+if isOrin; then
+    ok "platform" "$(platformName)"
+else
+    warn "platform" "$(platformName) - not the Orin, so -s is needed without real CAN hardware"
+fi
+
 requireCommand docker || die "docker isn't installed, see docs/getting-started.mdx"
 docker info >/dev/null 2>&1 || die "the docker daemon isn't reachable (is it running, are you in the docker group?)"
 ok "docker" "$(docker version --format '{{.Server.Version}}' 2>/dev/null)"
@@ -72,8 +78,12 @@ if [ "$skip_can" = true ]; then
     warn "$CAN_IFACE" "skipped with -s, can_rmdx8 will fail to open the bus"
 elif ! canExists; then
     bad "$CAN_IFACE" "interface not present"
-    note "this host has no CAN hardware, or the transceiver isn't powered."
-    note "if you meant to run without a drivebase, re-run with -s."
+    if isOrin; then
+        note "the mttcan driver didn't create it - check the transceiver and dmesg."
+    else
+        note "$(platformName) isn't the Orin, so there's no CAN hardware here."
+        note "if you meant to run without a drivebase, re-run with -s."
+    fi
     die "no CAN bus to drive"
 elif canIsUp; then
     bitrate="$(canBitrate)"

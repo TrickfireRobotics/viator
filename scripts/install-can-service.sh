@@ -1,14 +1,5 @@
 #!/usr/bin/env bash
-# Makes CAN bringup automatic, so the bus is already up by the time anyone logs in.
-#
-# Installs a systemd unit that runs setup-can-network.sh at boot and enables it. Safe to
-# enable: it configures the interface and puts the drivebase controllers into speed mode,
-# it does not command any motion.
-#
-# Run it once per rover:
-#   make can-service
-#
-# The unit points at this checkout, so if the repo moves, run it again.
+#@ makes CAN bringup automatic on boot
 
 set -uo pipefail
 
@@ -18,16 +9,24 @@ readonly UNIT_NAME="viator-can.service"
 readonly UNIT_PATH="/etc/systemd/system/${UNIT_NAME}"
 readonly SETUP_SCRIPT="${REPO_ROOT}/scripts/setup-can-network.sh"
 
-if [ "$(id -u)" -ne 0 ]; then
-    die "needs root, re-run with 'make can-service' or sudo"
-fi
+requireOrin "a boot-time CAN service"
 
 [ -x "$SETUP_SCRIPT" ] || die "can't find ${SETUP_SCRIPT}"
 
+# Checked platform before asking for a password: a wrong-machine run should refuse
+# immediately, not after a sudo prompt. The re-exec guard caps this at one attempt - if
+# sudo is misconfigured and somehow returns without actually elevating, this fails loudly
+# instead of re-execing itself forever.
+if [ "$(id -u)" -ne 0 ]; then
+    if [ -n "${_VIATOR_REEXECED:-}" ]; then
+        die "still not root after sudo - check your sudo configuration"
+    fi
+    _VIATOR_REEXECED=1 exec sudo "$0" "$@"
+    die "needs root and re-execing under sudo failed - try 'sudo $0'"
+fi
+
 banner "installing CAN bringup"
 
-# Written here rather than kept as a separate file because the ExecStart path has to be
-# substituted in anyway, and one file beats a template plus an installer.
 cat >"$UNIT_PATH" <<EOF
 # Brings the CAN bus up at boot. Installed by scripts/install-can-service.sh - edit that
 # and re-run 'make can-service' rather than editing this copy.
@@ -59,7 +58,7 @@ ok "daemon-reload" "done"
 systemctl enable "$UNIT_NAME" >/dev/null 2>&1 || die "could not enable ${UNIT_NAME}"
 ok "enabled" "runs at every boot"
 
-# Start it now too, so this doesn't need a reboot to take effect.
+# start it right now
 if systemctl start "$UNIT_NAME"; then
     if canIsUp; then
         bitrate="$(canBitrate)"

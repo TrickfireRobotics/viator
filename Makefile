@@ -29,7 +29,7 @@ graph: ## run the node graph alone, in the foreground (no dashboard)
 # --- the rover's CAN bus ---
 
 can-service: ## make CAN bringup automatic at boot (run once per rover)
-	sudo ./scripts/install-can-service.sh
+	@./scripts/install-can-service.sh
 
 can-setup: ## bring the CAN bus up right now, by hand
 	@./scripts/setup-can-network.sh

@@ -10,6 +10,12 @@
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
+
+# mttcan is the Tegra SoC's built-in CAN controller driver - it doesn't exist for any
+# other hardware, so this would otherwise fail confusingly at modprobe on a laptop.
+requireOrin "can1 or the mttcan driver"
+
 # Commands
 START_CMD="8800000000000000"
 CLEAR_CMD="9B00000000000000"
@@ -27,9 +33,8 @@ sudo modprobe can_raw
 sudo modprobe mttcan
 
 if ! ip link show "$IFACE" >/dev/null 2>&1; then
-    echo "error: ${IFACE} does not exist." >&2
-    echo "The mttcan module didn't create it, which usually means this isn't the Orin" >&2
-    echo "or the CAN transceiver isn't powered. Check 'ip link show' and dmesg." >&2
+    echo "error: ${IFACE} does not exist even though this is the Orin." >&2
+    echo "The CAN transceiver likely isn't powered. Check 'ip link show' and dmesg." >&2
     exit 1
 fi
 

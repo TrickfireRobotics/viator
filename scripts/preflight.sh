@@ -16,6 +16,15 @@ readonly ROSBRIDGE_PORT=9090
 
 banner "preflight"
 
+# ---- platform ----
+# Informational, not pass/fail: this just explains in advance why the CAN, motors and
+# cameras checks below are about to fail if this isn't the Orin.
+if isOrin; then
+    ok "platform" "$(platformName)"
+else
+    warn "platform" "$(platformName) - not the Orin, hardware checks below won't pass here"
+fi
+
 # ---- image and container ----
 if docker image inspect viator:dev >/dev/null 2>&1; then
     ok "image" "$(docker image inspect viator:dev --format '{{join .RepoTags ", "}}')"
