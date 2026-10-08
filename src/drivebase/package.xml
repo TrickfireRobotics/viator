@@ -4,9 +4,11 @@
   <name>drivebase</name>
   <version>0.0.0</version>
   <description>Connects the controller to the wheel motors</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
+
   <exec_depend>custom_interfaces</exec_depend>
   <exec_depend>lib</exec_depend>
-
 
   <export>
     <build_type>ament_python</build_type>

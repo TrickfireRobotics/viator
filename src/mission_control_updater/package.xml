@@ -3,9 +3,12 @@
 <package format="3">
   <name>mission_control_updater</name>
   <version>0.0.0</version>
+  <description>Sends rover telemetry to Mission Control</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
+
   <exec_depend>custom_interfaces</exec_depend>
   <exec_depend>lib</exec_depend>
-
 
   <export>
     <build_type>ament_python</build_type>
