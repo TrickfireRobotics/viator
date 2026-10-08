@@ -7,11 +7,13 @@ structured, so the four nested bracket prefixes the console used to print are a 
 choice here instead of something to strip.
 
 One thing `/rosout` cannot show: output that never went through a ROS logger, such as a
-Python traceback or OpenCV's own C++ warnings. For those, read the journal
-(`journalctl -u viator -f`) alongside this.
+Python traceback or OpenCV's own C++ warnings. Those only exist on the launch's own stdout,
+which `make launch` puts in `log/launch-latest.log` and a deployed rover puts in the
+journal (`journalctl -u viator -f`). `?` shows the path in use.
 """
 
 import base64
+import os
 import sys
 import time
 from collections import deque
@@ -25,7 +27,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.widgets import DataTable, Footer, Header, Input, RichLog
+from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
 from lib.status import STATE_NAMES
@@ -65,6 +67,33 @@ STALE_AFTER_SEC = 3.0
 
 SAVE_DIR = Path.home() / ".ros" / "viator-tui"
 
+# Where the launch's own stdout went, if whatever started us said so. Set by scripts/run.sh.
+LAUNCH_LOG_HINT = os.environ.get("VIATOR_LAUNCH_LOG", "log/launch-latest.log")
+
+HELP_TEXT = f"""[bold]keys[/bold]
+  [cyan]p[/cyan]  pause the log, so you can read it. nothing is lost while paused
+  [cyan]f[/cyan]  cycle the minimum severity: info+ -> warn+ -> error -> debug+
+  [cyan]/[/cyan]  filter the log by text. enter applies it, esc clears it
+  [cyan]c[/cyan]  copy every visible line to your clipboard, local machine included
+  [cyan]s[/cyan]  save every visible line under ~/.ros/viator-tui
+  [cyan]?[/cyan]  this
+  [cyan]q[/cyan]  quit
+
+[bold]module states[/bold]
+  [cyan]starting[/cyan]  constructed, but hasn't finished bringing itself up
+  [green]ok[/green]        started and doing its job
+  [yellow]degraded[/yellow]  running, but something is wrong. the detail says what
+  [bold red]failed[/bold red]    running, but can't do its job at all
+  [bold red]stale[/bold red]     stopped reporting for {int(STALE_AFTER_SEC)}s, so it died or hung
+
+[bold]what this can't show[/bold]
+  the log pane is [cyan]/rosout[/cyan], so it has everything logged through ROS
+  and nothing that bypassed it. a python traceback or OpenCV's own
+  warnings only reach the launch's stdout:
+    [cyan]{LAUNCH_LOG_HINT}[/cyan]
+
+[dim]? or esc to close[/dim]"""
+
 
 def _copyToClipboard(app: App[None], text: str) -> str:
     """
@@ -96,6 +125,7 @@ class ViatorTui(App[None]):
     CSS = """
     Screen {
         layout: vertical;
+        layers: base overlay;
     }
 
     #status {
@@ -124,6 +154,24 @@ class ViatorTui(App[None]):
     #search.visible {
         display: block;
     }
+
+    #help {
+        layer: overlay;
+        display: none;
+        width: auto;
+        max-width: 80;
+        height: auto;
+        max-height: 100%;
+        border: round $accent;
+        border-title-align: left;
+        background: $surface;
+        padding: 1 2;
+        offset: 3 1;
+    }
+
+    #help.visible {
+        display: block;
+    }
     """
 
     BINDINGS: ClassVar[list[Binding]] = [
@@ -133,7 +181,8 @@ class ViatorTui(App[None]):
         Binding("slash", "focus_search", "search"),
         Binding("c", "copy", "copy"),
         Binding("s", "save", "save"),
-        Binding("escape", "clear_search", "clear", show=False),
+        Binding("question_mark", "toggle_help", "help"),
+        Binding("escape", "dismiss_overlays", "clear", show=False),
     ]
 
     def __init__(self) -> None:
@@ -163,6 +212,10 @@ class ViatorTui(App[None]):
             pane.border_title = "log"
             yield Input(placeholder="filter text, enter to apply", id="search")
             yield RichLog(id="log", markup=True, wrap=True, highlight=False, auto_scroll=True)
+
+        help_panel = Static(HELP_TEXT, id="help")
+        help_panel.border_title = "how to read this"
+        yield help_panel
 
         yield Footer()
 
@@ -300,6 +353,16 @@ class ViatorTui(App[None]):
         search.add_class("visible")
         search.focus()
 
+    def action_toggle_help(self) -> None:
+        """
+        Shows what the keys do and what the states mean.
+
+        The footer lists the keys but not what any of them are for, and the status column
+        is four words that only make sense if you already know them. This is the answer to
+        "I opened the dashboard, now what".
+        """
+        self.query_one("#help", Static).toggle_class("visible")
+
     def action_clear_search(self) -> None:
         """
         Drops the text filter and hides the input again.
@@ -311,6 +374,19 @@ class ViatorTui(App[None]):
         self._redrawLog()
         self._updateTitles()
         self.query_one("#log", RichLog).focus()
+
+    def action_dismiss_overlays(self) -> None:
+        """
+        What escape does: close the help panel if it's open, otherwise drop the filter.
+
+        One key for "get me back to the log" rather than one per thing that could be
+        covering it.
+        """
+        help_panel = self.query_one("#help", Static)
+        if help_panel.has_class("visible"):
+            help_panel.remove_class("visible")
+            return
+        self.action_clear_search()
 
     def action_copy(self) -> None:
         """

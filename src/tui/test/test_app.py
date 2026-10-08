@@ -19,7 +19,7 @@ pytest.importorskip("rcl_interfaces", reason="needs a sourced ROS 2 environment"
 pytest.importorskip("custom_interfaces", reason="needs the workspace to be built")
 
 from rcl_interfaces.msg import Log
-from textual.widgets import DataTable, Input, RichLog
+from textual.widgets import DataTable, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
 from tui.app import ViatorTui
@@ -132,6 +132,23 @@ async def test_search_toggles_and_clears():
         await pilot.pause()
         assert app._search == ""
         assert not app.query_one("#search", Input).has_class("visible")
+
+
+@asyncTest
+async def test_help_opens_and_escape_closes_it():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        panel = app.query_one("#help", Static)
+        assert not panel.has_class("visible")
+
+        await pilot.press("question_mark")
+        await pilot.pause()
+        assert panel.has_class("visible")
+
+        # escape closes the help panel before it touches the filter
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not panel.has_class("visible")
 
 
 @asyncTest
