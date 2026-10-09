@@ -68,7 +68,7 @@ Back in the first terminal, bring the CAN interface up:
 make can-setup
 ```
 
-This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
+This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can0` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
 
 ## Build and launch
 
