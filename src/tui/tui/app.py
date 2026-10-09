@@ -119,6 +119,11 @@ class ViatorTui(App[None]):
     Screen {
         layout: vertical;
         layers: base overlay;
+        background: transparent;
+    }
+
+    #status, #log-pane, #log, #search {
+        background: transparent;
     }
 
     #status {
