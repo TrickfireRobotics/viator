@@ -1,13 +1,11 @@
-import sys
-
-import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import String
 
 from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_info import RobotInfo
+from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 from . import info_to_json_helper
 
@@ -23,6 +21,9 @@ class MissionControlUpdater(Node):
 
         self.timer = self.create_timer(0.01, self.sendData)
         self.robot_info = RobotInfo(self)
+
+        self._status = StatusReporter(self, "mission_control_updater")
+        self._status.ok()
 
     def sendData(self) -> None:
         json_builder = info_to_json_helper.InfoToJSONHelper()
@@ -40,20 +41,7 @@ def main(args: list[str] | None = None) -> None:
     The entry point of the node.
     """
 
-    rclpy.init(args=args)
-    try:
-        node = MissionControlUpdater()
-        rclpy.spin(node)
-
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        # This is done when we ctrl-c the progam to shut it down
-        node.get_logger().info(
-            colorStr("Shutting down mission_control_updater_node", ColorCodes.BLUE_OK)
-        )
-        node.destroy_node()
-        sys.exit(0)
+    runNodes(MissionControlUpdater, args=args)
 
 
 if __name__ == "__main__":

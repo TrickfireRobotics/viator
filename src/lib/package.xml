@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>lib</name>
+  <version>0.0.0</version>
+  <description>Shared helpers used by every Viator node</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>custom_interfaces</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

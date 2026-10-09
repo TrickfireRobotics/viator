@@ -13,10 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="vladimirkupryukhin@gmail.com",
-    description="TODO: Package description",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Sends rover telemetry to Mission Control",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": ["mission_control_updater = mission_control_updater.updater:main"],
     },

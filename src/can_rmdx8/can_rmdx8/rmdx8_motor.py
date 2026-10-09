@@ -20,6 +20,8 @@ from std_msgs.msg import String
 from lib.configs import RMDx8MotorConfig
 from lib.motor_state.rmd_motor_state import RMDX8MotorState, RMDX8RunSettings
 
+from .can_health import CanHealth
+
 DEGREE_TO_REV = 360
 
 
@@ -47,9 +49,11 @@ class RMDx8Motor:
         ros_node: Node,
         cb: Callable[[], None],
         driver_lock: Lock,
+        health: CanHealth,
     ) -> None:
         self.config = config
         self._ros_node = ros_node
+        self._health = health
         self.motor = rmd.ActuatorInterface(driver, config.can_id)
         self.mutex_lock = driver_lock
         self._callback_group = ReentrantCallbackGroup()
@@ -71,7 +75,7 @@ class RMDx8Motor:
         topic_name = self.config.getCanTopicName()
         # Size of queue is 1. All additional ones are dropped
         publisher = self._ros_node.create_publisher(std_msgs.msg.String, topic_name, 1)
-        self._ros_node.get_logger().info("RMDx8 Publisher Created!!")
+        self._ros_node.get_logger().debug(f"created publisher {topic_name}")
         return publisher
 
     def dataInCallback(self, msg: String) -> None:
@@ -137,31 +141,22 @@ class RMDx8Motor:
                         run_settings.acceleration * 360, run_settings.acceleration_type
                     )
         except myactuator_rmd_py.can.ControllerProblemError as e:
-            self._ros_node.get_logger().error(
-                f"Controller fault on motor {self.config.can_id}: {e}",
-                throttle_duration_sec=1.0,
-            )
+            self._health.recordFault(self.config.can_id, f"command: {e}")
         except myactuator_rmd_py.can.SocketException as e:
-            self._ros_node.get_logger().error(
-                f"CAN error in dataInCallback for motor {self.config.can_id}: {e}",
-                throttle_duration_sec=1.0,
-            )
+            self._health.recordError(self.config.can_id, f"command: {e}")
         except Exception as e:
             # The driver's exceptions aren't all under one base class, so a bus
             # glitch here must never be allowed to kill the whole node. Include
             # the exception's type since the driver doesn't give these a common
             # base class to catch, and knowing the type is what lets us add a
             # proper except clause for it later instead of it hiding here.
-            self._ros_node.get_logger().error(
-                f"Unexpected error in dataInCallback for motor {self.config.can_id}: "
-                f"{type(e).__name__}: {e}",
-                throttle_duration_sec=1.0,
-            )
+            self._health.recordError(self.config.can_id, f"command: {type(e).__name__}: {e}")
 
     def publishData(self) -> None:
         """
         Publishes data from the rmdx8 controller
         """
+        self._health.recordPoll(self.config.can_id)
         try:
             with self.mutex_lock:
                 self._poll_count += 1
@@ -179,27 +174,15 @@ class RMDx8Motor:
                 )
             self._publisher.publish(state.toMsg())
         except myactuator_rmd_py.can.ControllerProblemError as e:
-            self._ros_node.get_logger().error(
-                f"Controller fault on motor {self.config.can_id}: {e}",
-                throttle_duration_sec=1.0,
-            )
+            self._health.recordFault(self.config.can_id, f"poll: {e}")
         except myactuator_rmd_py.can.SocketException as e:
+            # EAGAIN means the response didn't arrive in time; the next tick retries
             if "Resource temporarily unavailable" in str(e):
-                self._ros_node.get_logger().warning(
-                    f"Packet dropped from motor {self.config.can_id}, will retry next tick",
-                    throttle_duration_sec=1.0,
-                )
+                self._health.recordDrop(self.config.can_id)
             else:
-                self._ros_node.get_logger().error(
-                    f"CAN error in publishData for motor {self.config.can_id}: {e}",
-                    throttle_duration_sec=1.0,
-                )
+                self._health.recordError(self.config.can_id, f"poll: {e}")
         except Exception as e:
-            self._ros_node.get_logger().error(
-                f"Unexpected error in publishData for motor {self.config.can_id}: "
-                f"{type(e).__name__}: {e}",
-                throttle_duration_sec=1.0,
-            )
+            self._health.recordError(self.config.can_id, f"poll: {type(e).__name__}: {e}")
 
     def stopMotor(self) -> None:
         """

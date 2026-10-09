@@ -7,7 +7,7 @@ slug: architecture
 ## Repo layout
 
 ```
-urc-2023/
+viator/
 ├── src/                  # ROS 2 workspace (colcon)
 │   ├── arm/              # Arm control node
 │   ├── camera/           # Camera streaming node
@@ -16,28 +16,48 @@ urc-2023/
 │   ├── custom_interfaces/# Shared .srv/.msg definitions
 │   ├── drivebase/        # Drivebase (wheel) control node
 │   ├── heartbeat/        # Connection watchdog / e-stop
-│   ├── lib/               # Shared Python library (not a standalone node)
+│   ├── lib/              # Shared Python library (not a standalone node)
 │   ├── mission_control_updater/ # Publishes robot state to mission control
+│   ├── supervisor/       # Watches module health, prints the readiness summary
+│   ├── tui/              # The terminal dashboard
 │   ├── viator_launch/    # Top-level launch file
 │   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
-├── scripts/              # Build/launch/deploy shell scripts (see Makefile)
-├── .devcontainer/        # Dockerfile + bashrc for the dev container
-└── Makefile              # `make build` / `make launch` / etc.
+├── scripts/              # Everything the Makefile runs (see below)
+├── .devcontainer/        # Dockerfile + compose file for the container
+└── Makefile              # the entry point; `make` lists every target
 ```
 
 `src/` is a standard ROS 2 (`colcon`) workspace. Every package here is `ament_python` except `custom_interfaces`, which is `ament_cmake` (it only generates message/service headers via `rosidl_generate_interfaces`, no compiled node code).
+
+## `scripts/` — the workflow
+
+Every `make` target is a thin wrapper over a script here, so anything can also be run directly. `scripts/lib/common.sh` holds the shared output helpers and environment checks, which is why `make launch` and `make status` report in the same format.
+
+| Script | Purpose |
+| --- | --- |
+| `launch.sh` | The entry point. Dispatches to `up.sh` on the host or `run.sh` in the container, so `make launch` works from either side. |
+| `up.sh` | Host orchestration: check the host, bring CAN up, build and start the container, build the workspace, hand over to `run.sh`. |
+| `run.sh` | Starts the node graph in the background and the dashboard in the foreground, and stops the graph when the dashboard exits. |
+| `graph.sh` | The node graph alone, in the foreground. |
+| `tui.sh` | The dashboard alone, attached to a rover that is already running. |
+| `stop.sh`, `preflight.sh` | Stop the graph; check the rover is ready. |
+| `build.sh` | `colcon build`. |
+| `setup-can-network.sh`, `install-can-service.sh` | CAN interface bringup and drivebase enable; the systemd unit that does it at boot. |
+| `container-launch.sh`, `connect-to-container.sh`, `sync-to-orin.sh` | Container shell access and rsyncing a checkout to the rover. |
+
+Scripts that need ROS sourced re-run themselves inside the container when they're started on the host, so there is no "wrong terminal" to be in.
 
 ## `lib/` — shared library
 
 Not a ROS node itself; every node package imports from here.
 
-| File                                     | Purpose                                                                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lib/configs.py`                          | Static motor configuration (CAN IDs, motor type, gear ratios) shared across the whole robot.                                                                 |
-| `lib/interface/robot_interface.py`        | `RobotInterface` — the utility class nodes use to command motors (converts between physical units and raw motor commands, publishes over the CAN bridges).  |
-| `lib/interface/robot_info.py`             | `RobotInfo` — the read-side counterpart: subscribes to motor state topics and exposes the current state of every motor on the robot.                        |
-| `lib/motor_state/`                        | Typed state objects for each motor backend (`CANMotorState`, `MoteusMotorState`, `RMDX8MotorState`).                                                         |
-| `lib/color_codes.py`, `lib/json_msg.py`   | Small logging/serialization helpers.                                                                                                                         |
+| File | Purpose |
+| --- | --- |
+| `lib/configs.py` | Static motor configuration (CAN IDs, motor type, gear ratios) shared across the whole robot. |
+| `lib/interface/robot_interface.py` | `RobotInterface` — the utility class nodes use to command motors (converts between physical units and raw motor commands, publishes over the CAN bridges). |
+| `lib/interface/robot_info.py` | `RobotInfo` — the read-side counterpart: subscribes to motor state topics and exposes the current state of every motor on the robot. |
+| `lib/motor_state/` | Typed state objects for each motor backend (`CANMotorState`, `MoteusMotorState`, `RMDX8MotorState`). |
+| `lib/color_codes.py`, `lib/json_msg.py` | Small logging/serialization helpers. |
 
 ## Motor drivers
 
@@ -62,13 +82,24 @@ Two independent CAN motor controller backends, both bridging to the shared `lib/
 
 ## Robot-facing nodes
 
-| Node                      | Description                                                                                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `drivebase`                | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`.                                                                                        |
-| `arm`                       | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
-| `camera`                    | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`.                                       |
-| `heartbeat`                 | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop.                                                              |
-| `mission_control_updater`   | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
+| Node | Description |
+| --- | --- |
+| `drivebase` | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`. |
+| `arm` | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
+| `camera` | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`. |
+| `heartbeat` | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop. |
+| `mission_control_updater` | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
+
+## Observability nodes
+
+Neither of these touches hardware, and neither is required for the rover to drive.
+
+| Node | Description |
+| --- | --- |
+| `supervisor` | Subscribes to `/viator/node_status` and prints one readable readiness summary once every module has checked in, then stays quiet until something changes state. |
+| `tui` | The [terminal dashboard](./dashboard.mdx). A read-only observer: it subscribes to `/viator/node_status` and follows `log/launch-latest.log`, and is deliberately not part of the launch file so its lifetime is independent of the rover's. |
+
+Health reporting itself lives in `lib/status.py`. Each node constructs a `StatusReporter` once it has finished starting up and publishes `starting`/`ok`/`degraded`/`failed` with a one-line detail, republishing every second so a node that stops reporting can be spotted. That replaces inferring health from log archaeology: a `Launching <node>` line is printed at the top of a constructor and says nothing about whether the node works.
 
 ## `custom_interfaces`
 
@@ -76,10 +107,13 @@ Shared ROS interface definitions used across packages, e.g. `srv/ArmMode.srv` (s
 
 ## `viator_launch`
 
-`launch/robot.launch.py` is the single entry point that starts every node above together — this is what `make launch` runs (`ros2 launch viator_launch robot.launch.py`).
+`launch/robot.launch.py` starts every node above together, and is what `make launch` ends up running.
+
+Two restart policies, chosen per node. A node that commands motors is launched with `on_exit=Shutdown()`: if it dies the motors keep whatever setpoint they were last given, so limping on without it is worse than stopping, and taking the whole graph down SIGINTs `can_rmdx8`, whose shutdown hook stops the motors. Everything else is launched with `respawn=True` and comes back on its own.
 
 <Callout type="info">
-    See [Launching the Rover](./launching.mdx) for the full build → CAN setup → launch workflow.
+    See [Launching the Rover](./launching.mdx) for the workflow, and [The
+    Dashboard](./dashboard.mdx) for reading what it reports.
 </Callout>
 
 ## `vision_opencv`

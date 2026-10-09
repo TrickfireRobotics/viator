@@ -1,0 +1,245 @@
+"""
+Drives the dashboard headlessly through Textual's pilot.
+
+The UI is the one part of this repo that can be meaningfully tested off the rover: no CAN
+bus, no cameras, no motors. These run inside the dev container, where ROS and textual are
+both present, and skip anywhere they aren't.
+"""
+
+import asyncio
+import functools
+import threading
+import time
+from collections.abc import Callable, Coroutine
+from typing import Any
+
+import pytest
+
+pytest.importorskip("textual", reason="textual is only installed in the dev container")
+pytest.importorskip("rcl_interfaces", reason="needs a sourced ROS 2 environment")
+pytest.importorskip("custom_interfaces", reason="needs the workspace to be built")
+
+from rcl_interfaces.msg import Log
+from textual.widgets import DataTable, Input, RichLog, Static
+
+from custom_interfaces.msg import NodeStatus
+from tui.app import ViatorTui
+from tui.bridge import LaunchLogTail, LogRecord, StatusRecord, parseLaunchLine
+
+LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
+
+
+def asyncTest(fn: Callable[..., Coroutine[Any, Any, None]]) -> Callable[..., None]:
+    """
+    Runs an async test body in its own event loop.
+
+    Deliberately hand-rolled instead of using pytest-asyncio: installing that pulls in a
+    pytest new enough to drop the deprecated `path` hook argument, which breaks ROS's
+    launch_testing plugin and takes `colcon test` down with it. functools.wraps keeps the
+    signature intact so pytest still injects fixtures.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        asyncio.run(fn(*args, **kwargs))
+
+    return wrapper
+
+
+@pytest.fixture(autouse=True)
+def _no_ros(monkeypatch):
+    """
+    Stops the app opening a real rclpy context; these tests feed records in directly.
+    """
+    import tui.app as app_mod
+
+    monkeypatch.setattr(app_mod.RosBridge, "start", lambda self: None)
+    monkeypatch.setattr(app_mod.RosBridge, "stop", lambda self: None)
+
+
+def makeLog(level: int, node: str, message: str) -> LogRecord:
+    return LogRecord(
+        level=level,
+        level_name=LEVEL_NAMES[level],
+        node=node,
+        message=message,
+        seconds=int(time.time()),
+        nanoseconds=0,
+    )
+
+
+def test_launch_lines_include_tracebacks_and_ros_levels():
+    error = parseLaunchLine("[ERROR] [can_rmdx8]: bus down\n")
+    traceback = parseLaunchLine("Traceback (most recent call last):\n")
+    warning = parseLaunchLine("[ WARN:0] OpenCV warning\n")
+
+    assert (error.level, error.node, error.message) == (Log.ERROR, "can_rmdx8", "bus down")
+    assert (traceback.level, traceback.node, traceback.message) == (
+        Log.ERROR,
+        "launch",
+        "Traceback (most recent call last):",
+    )
+    assert (warning.level, warning.level_name) == (Log.WARN, "WARN")
+
+
+def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
+    path = tmp_path / "launch.log"
+    path.write_text("[INFO] [launch]: starting\n")
+    records: list[LogRecord] = []
+    received = threading.Event()
+
+    def onLog(record: LogRecord) -> None:
+        records.append(record)
+        if len(records) == 2:
+            received.set()
+
+    tail = LaunchLogTail(path, onLog)
+    tail.start()
+    with path.open("a") as log:
+        log.write("[ERROR] [drivebase]: stopped\n")
+
+    assert received.wait(timeout=1.0)
+    tail.stop()
+    assert [(record.level, record.message) for record in records] == [
+        (Log.INFO, "starting"),
+        (Log.ERROR, "stopped"),
+    ]
+
+
+@asyncTest
+async def test_panes_mount():
+    app = ViatorTui()
+    async with app.run_test():
+        assert len(app.query_one("#status", DataTable).columns) == 3
+        assert app.query_one("#log", RichLog) is not None
+        assert app.query_one("#search", Input) is not None
+
+
+@asyncTest
+async def test_status_rows_appear():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyStatus(StatusRecord("can_rmdx8", NodeStatus.DEGRADED, "6 motors, 284 drops"))
+        app._applyStatus(StatusRecord("heartbeat", NodeStatus.OK, "connected"))
+        await pilot.pause()
+        assert app.query_one("#status", DataTable).row_count == 2
+
+
+@asyncTest
+async def test_default_filter_hides_debug():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(Log.INFO, "drivebase", "driving"))
+        app._applyLog(makeLog(Log.DEBUG, "camera", "created publisher"))
+        app._applyLog(makeLog(Log.ERROR, "can_rmdx8", "bus down"))
+        await pilot.pause()
+
+        shown = [r.level for r in app._records if app._shouldShow(r)]
+        assert shown == [Log.INFO, Log.ERROR]
+
+
+@asyncTest
+async def test_pause_stops_autoscroll():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.press("p")
+        assert app._paused
+        assert not app.query_one("#log", RichLog).auto_scroll
+
+        await pilot.press("p")
+        assert not app._paused
+
+
+@asyncTest
+async def test_level_key_cycles():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        start = app._level_index
+        await pilot.press("f")
+        assert app._level_index == (start + 1) % 4
+
+
+@asyncTest
+async def test_search_toggles_and_clears():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.press("slash")
+        await pilot.pause()
+        assert app.query_one("#search", Input).has_class("visible")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app._search == ""
+        assert not app.query_one("#search", Input).has_class("visible")
+
+
+@asyncTest
+async def test_help_opens_and_escape_closes_it():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        panel = app.query_one("#help", Static)
+        assert not panel.has_class("visible")
+
+        await pilot.press("question_mark")
+        await pilot.pause()
+        assert panel.has_class("visible")
+
+        # escape closes the help panel before it touches the filter
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not panel.has_class("visible")
+
+
+@asyncTest
+async def test_text_filter_narrows_log():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(Log.INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(Log.INFO, "camera", "publishing video0"))
+        await pilot.pause()
+
+        app._search = "video"
+        app._redrawLog()
+
+        shown = [r for r in app._records if app._shouldShow(r)]
+        assert len(shown) == 1
+        assert shown[0].node == "camera"
+
+
+@asyncTest
+async def test_save_writes_only_visible_lines(tmp_path, monkeypatch):
+    import tui.app as app_mod
+
+    monkeypatch.setattr(app_mod, "SAVE_DIR", tmp_path / "out")
+
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(Log.INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(Log.DEBUG, "camera", "created publisher"))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+
+        files = list((tmp_path / "out").glob("*.log"))
+        assert len(files) == 1
+
+        body = files[0].read_text()
+        assert "driving forward" in body
+        assert "created publisher" not in body
+
+
+@asyncTest
+async def test_module_goes_stale_when_reports_stop():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyStatus(StatusRecord("arm", NodeStatus.OK, "mode disabled"))
+        await pilot.pause()
+
+        # backdate the last sighting past the stale threshold
+        app._status_seen["arm"] = time.monotonic() - 10.0
+        app._refreshStatus()
+        await pilot.pause()
+
+        cell = app.query_one("#status", DataTable).get_cell_at((0, 1))
+        assert str(cell) == "stale"

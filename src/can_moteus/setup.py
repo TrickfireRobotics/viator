@@ -17,10 +17,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="trickfire@todo.todo",
-    description="TODO: Package description",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Controls Moteus motor controllers over CAN",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": ["can_moteus = can_moteus.ros_moteus_bridge:main"],
     },

@@ -1,0 +1,20 @@
+# Build output. The container bind-mounts the source and builds in place, so sending
+# the host's copy would only bloat the build context.
+build/
+install/
+log/
+
+.git/
+.mypy_cache/
+dist/
+node_modules/
+__pycache__/
+*.pyc
+
+# cv_bridge comes from apt (ros-humble-cv-bridge). The submodule is not initialised and
+# building it from source would add a long C++ compile for no gain.
+src/vision_opencv/
+
+docs/
+.github/
+.vscode/

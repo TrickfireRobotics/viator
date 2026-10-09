@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
+# `make launch`, from wherever you happen to be.
+#
+# On the rover's host (or your laptop), there is a container to build and a CAN bus to
+# bring up first, so this hands off to up.sh, which does the whole chain. Inside the
+# container all of that is already done, so it goes straight to the node graph plus
+# dashboard.
+#
+# One command either way. The alternative was two targets and a rule about which one to
+# use where, which is the thing this is replacing.
 
-source /opt/ros/$ROS_DISTRO/setup.bash
-source /home/trickfire/urc-2023/install/setup.bash
+set -uo pipefail
 
-#modprobe can
-#modprobe can_raw
-#modprobe mttcan
-#ip link set can0 type can bitrate 1000000 dbitrate 5000000 fd on
-#ip link set can0 up
+source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
-export PYTHONPATH="/home/trickfire/urc-2023/src/:$PYTHONPATH"
+if inContainer; then
+    exec "${REPO_ROOT}/scripts/run.sh" "$@"
+fi
 
-ros2 launch viator_launch robot.launch.py --log-level rosbridge_websocket:=warn
+exec "${REPO_ROOT}/scripts/up.sh" "$@"

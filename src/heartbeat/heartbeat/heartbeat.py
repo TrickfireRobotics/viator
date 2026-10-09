@@ -1,12 +1,13 @@
 import time
 
-import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
 
 from lib import configs
 from lib.color_codes import ColorCodes, colorStr
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
 # Credit: Most of this code is credit to Anna. I (Hong) just
 # add some finishing code and clean up the class.
@@ -38,11 +39,8 @@ class Heartbeat(Node):
         # self._robot_info = RobotInfo(self)
         self._robot_interface = RobotInterface(self)
 
-        # give enough time (10s) for others to initialize
-        time.sleep(10)
-
-        # flag to store connection status
-        self._connection_lost = False
+        # flag to store connection status; starts "lost" until the first heartbeat arrives
+        self._connection_lost = True
 
         # create subscription to mission control
         self._is_alive_subscriber = self.create_subscription(
@@ -64,6 +62,9 @@ class Heartbeat(Node):
         # check connection every 1 second
         self._timer = self.create_timer(1.0, self.check_connection)
 
+        self._status = StatusReporter(self, "heartbeat")
+        self._status.ok("awaiting mission control")
+
     def heartbeat_callback(self, msg: Bool) -> None:
         """
         A call back method for the heartbeat everytime the
@@ -81,12 +82,18 @@ class Heartbeat(Node):
         # Update the timestamp of the last received heartbeat message
         self._last_heartbeat_time = time.time()
 
-        # Log connection active as before
         # doesn't matter the data, pub always pub True
         # just check to make sure nothing is wrong with pub
         if msg.data:
-            self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
-            self._connection_lost = False
+            # Only log at INFO on the transition into a connected state (startup or
+            # reconnect); the recurring per-second tick goes to DEBUG so it doesn't
+            # flood the default INFO output.
+            if self._connection_lost:
+                self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self._status.ok("mission control connected")
+                self._connection_lost = False
+            else:
+                self.get_logger().debug(colorStr("Connection active", ColorCodes.GREEN_OK))
 
         # Tell the client that the heartbeat was received.
         msg = Bool()
@@ -107,6 +114,7 @@ class Heartbeat(Node):
                 return
 
             self.get_logger().warning(colorStr("Connection lost", ColorCodes.WARNING_YELLOW))
+            self._status.degraded("mission control lost, motors stopped")
             self._connection_lost = True
 
             # call the robot interface to stop all motors
@@ -127,22 +135,16 @@ class Heartbeat(Node):
         for motor in all_motors:
             self._robot_interface.stopMotor(motor)
 
-            # debug message
-            self.get_logger().info(
-                colorStr("Stop motor can id" + str(motor.can_id), ColorCodes.FAIL_RED)
-            )
-
-        # finish [debug message]
-        self.get_logger().info(colorStr("Stop all motors!", ColorCodes.FAIL_RED))
+        # One line rather than one per motor. Connection loss is a routine event out in the
+        # field, and 12 lines of it buried everything else that mattered at the same moment.
+        can_ids = " ".join(str(motor.can_id) for motor in all_motors)
+        self.get_logger().warning(
+            colorStr(f"stopped all {len(all_motors)} motors ({can_ids})", ColorCodes.FAIL_RED)
+        )
 
 
 def main(args: list[str] | None = None) -> None:
-    rclpy.init(args=args)
-    heartbeat_node = Heartbeat()
-    rclpy.spin(heartbeat_node)
-
-    heartbeat_node.destroy_node()
-    rclpy.shutdown()
+    runNodes(Heartbeat, args=args)
 
 
 if __name__ == "__main__":
