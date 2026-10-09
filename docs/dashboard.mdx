@@ -79,7 +79,7 @@ The detail column is the module's own one-line summary: how many motors it found
 
 ## Reading the log pane
 
-Each line is `time`, `level`, `node`, `message`, and the level is colour-coded. The pane is the `/rosout` topic rather than scraped terminal output, so the fields arrive already separated and the node column is reliable.
+Each line is `time`, `level`, `node`, `message`, and the level is colour-coded. The pane replays and follows `log/launch-latest.log`, so it includes startup output and messages that do not go through a ROS logger, such as Python tracebacks.
 
 The log defaults to `info+`. Press `f` to walk the threshold up to `warn+` and `error`, then round to `debug+`.
 
@@ -137,16 +137,16 @@ The order that gets you to an answer fastest:
     </Step>
 </Steps>
 
-## What the dashboard can't show you
+## Launch output
 
-The log pane is `/rosout`, so it has everything logged through a ROS logger and nothing that bypassed one. A Python traceback, or OpenCV's own C++ warnings, go to the launch's stdout instead:
+The log pane follows the launch output, including ROS logs, Python tracebacks, and OpenCV's own C++ warnings:
 
 | How you started it | Where that output goes       |
 | ------------------ | ---------------------------- |
 | `make launch`      | `log/launch-latest.log`      |
-| `make graph`       | the terminal it's running in |
+| `make graph`       | the terminal and `log/launch-latest.log` |
 
-Press `?` and the help panel names the file in use for the current session. This is the single most common reason a crash "isn't in the log": it is, just not in that log.
+Press `?` and the help panel names the file in use for the current session.
 
 <Accordions>
     <Accordion title="The dashboard is empty and nothing is arriving">

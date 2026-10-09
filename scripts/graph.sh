@@ -36,4 +36,7 @@ source "/opt/ros/${ROS_DISTRO}/setup.bash"
 source ./install/setup.bash
 set -u
 
-exec ros2 launch viator_launch robot.launch.py
+mkdir -p "$LAUNCH_LOG_DIR"
+: >"$LAUNCH_LOG"
+ros2 launch viator_launch robot.launch.py 2>&1 | tee "$LAUNCH_LOG"
+exit "${PIPESTATUS[0]}"

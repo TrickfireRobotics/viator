@@ -1,14 +1,9 @@
 """
 The Viator terminal dashboard: module status on top, live log underneath.
 
-Reads `/viator/node_status` for the status pane and `/rosout` for the log pane. Taking the
-log from `/rosout` rather than parsing a terminal means the fields arrive already
-structured, so the four nested bracket prefixes the console used to print are a rendering
-choice here instead of something to strip.
-
-One thing `/rosout` cannot show: output that never went through a ROS logger, such as a
-Python traceback or OpenCV's own C++ warnings. Those only exist on the launch's own stdout,
-which `make launch` puts in `log/launch-latest.log`. `?` shows the path in use.
+Reads `/viator/node_status` for the status pane and follows the launch-output file for the
+log pane. The file is used alongside `/rosout` so startup output, Python tracebacks, and
+native-library warnings are present even when the dashboard opens after the graph starts.
 """
 
 import base64
@@ -85,10 +80,9 @@ HELP_TEXT = f"""[bold]keys[/bold]
   [bold red]failed[/bold red]    running, but can't do its job at all
   [bold red]stale[/bold red]     stopped reporting for {int(STALE_AFTER_SEC)}s, so it died or hung
 
-[bold]what this can't show[/bold]
-  the log pane is [cyan]/rosout[/cyan], so it has everything logged through ROS
-  and nothing that bypassed it. a python traceback or OpenCV's own
-  warnings only reach the launch's stdout:
+[bold]log source[/bold]
+  the pane follows the launch output, including ROS logs, tracebacks, and native
+  library warnings:
     [cyan]{LAUNCH_LOG_HINT}[/cyan]
 
 [dim]? or esc to close[/dim]"""
@@ -188,6 +182,7 @@ class ViatorTui(App[None]):
         super().__init__()
 
         self._records: deque[LogRecord] = deque(maxlen=BUFFER_SIZE)
+        self._recent_log_keys: dict[tuple[int, str, str], float] = {}
         self._status: dict[str, StatusRecord] = {}
         self._status_seen: dict[str, float] = {}
 
@@ -195,7 +190,11 @@ class ViatorTui(App[None]):
         self._level_index = LEVEL_CYCLE.index(Log.INFO)
         self._search = ""
 
-        self._bridge = RosBridge(on_status=self._handleStatus, on_log=self._handleLog)
+        self._bridge = RosBridge(
+            on_status=self._handleStatus,
+            on_log=self._handleLog,
+            launch_log=Path(LAUNCH_LOG_HINT),
+        )
 
     # ***************
     # Composition and lifecycle
@@ -247,6 +246,15 @@ class ViatorTui(App[None]):
         self._refreshStatus()
 
     def _applyLog(self, record: LogRecord) -> None:
+        key = (record.level, record.node, record.message)
+        now = time.monotonic()
+        if now - self._recent_log_keys.get(key, 0.0) < 1.0:
+            return
+        self._recent_log_keys[key] = now
+        if len(self._recent_log_keys) > BUFFER_SIZE:
+            self._recent_log_keys = {
+                old_key: seen for old_key, seen in self._recent_log_keys.items() if now - seen < 1.0
+            }
         self._records.append(record)
         if not self._paused and self._shouldShow(record):
             self.query_one("#log", RichLog).write(self._renderRecord(record))

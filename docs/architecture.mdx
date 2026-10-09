@@ -97,7 +97,7 @@ Neither of these touches hardware, and neither is required for the rover to driv
 | Node | Description |
 | --- | --- |
 | `supervisor` | Subscribes to `/viator/node_status` and prints one readable readiness summary once every module has checked in, then stays quiet until something changes state. |
-| `tui` | The [terminal dashboard](./dashboard.mdx). A read-only observer: it subscribes to `/viator/node_status` and `/rosout` and renders them, and is deliberately not part of the launch file so its lifetime is independent of the rover's. |
+| `tui` | The [terminal dashboard](./dashboard.mdx). A read-only observer: it subscribes to `/viator/node_status` and follows `log/launch-latest.log`, and is deliberately not part of the launch file so its lifetime is independent of the rover's. |
 
 Health reporting itself lives in `lib/status.py`. Each node constructs a `StatusReporter` once it has finished starting up and publishes `starting`/`ok`/`degraded`/`failed` with a one-line detail, republishing every second so a node that stops reporting can be spotted. That replaces inferring health from log archaeology: a `Launching <node>` line is printed at the top of a constructor and says nothing about whether the node works.
 

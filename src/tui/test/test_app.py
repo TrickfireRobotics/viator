@@ -8,6 +8,7 @@ both present, and skip anywhere they aren't.
 
 import asyncio
 import functools
+import threading
 import time
 from collections.abc import Callable, Coroutine
 from typing import Any
@@ -23,7 +24,7 @@ from textual.widgets import DataTable, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
 from tui.app import ViatorTui
-from tui.bridge import LogRecord, StatusRecord
+from tui.bridge import LaunchLogTail, LogRecord, StatusRecord, parseLaunchLine
 
 LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
 
@@ -65,6 +66,44 @@ def makeLog(level: int, node: str, message: str) -> LogRecord:
         seconds=int(time.time()),
         nanoseconds=0,
     )
+
+
+def test_launch_lines_include_tracebacks_and_ros_levels():
+    error = parseLaunchLine("[ERROR] [can_rmdx8]: bus down\n")
+    traceback = parseLaunchLine("Traceback (most recent call last):\n")
+    warning = parseLaunchLine("[ WARN:0] OpenCV warning\n")
+
+    assert (error.level, error.node, error.message) == (Log.ERROR, "can_rmdx8", "bus down")
+    assert (traceback.level, traceback.node, traceback.message) == (
+        Log.ERROR,
+        "launch",
+        "Traceback (most recent call last):",
+    )
+    assert (warning.level, warning.level_name) == (Log.WARN, "WARN")
+
+
+def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
+    path = tmp_path / "launch.log"
+    path.write_text("[INFO] [launch]: starting\n")
+    records: list[LogRecord] = []
+    received = threading.Event()
+
+    def onLog(record: LogRecord) -> None:
+        records.append(record)
+        if len(records) == 2:
+            received.set()
+
+    tail = LaunchLogTail(path, onLog)
+    tail.start()
+    with path.open("a") as log:
+        log.write("[ERROR] [drivebase]: stopped\n")
+
+    assert received.wait(timeout=1.0)
+    tail.stop()
+    assert [(record.level, record.message) for record in records] == [
+        (Log.INFO, "starting"),
+        (Log.ERROR, "stopped"),
+    ]
 
 
 @asyncTest
