@@ -17,9 +17,15 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     python3-numpy \
     libboost-python-dev \
     libopencv-dev \
-    python3-opencv
+    python3-opencv \
+    ros-humble-cv-bridge
+
+RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
+    && echo "/opt/ros/$ROS_DISTRO/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)" >> /etc/ld.so.conf.d/ros2.conf \
+    && ldconfig
 
 RUN pip3 install --no-cache-dir \
+    "numpy<2" \
     moteus \
     pyusb \
     pybind11 \

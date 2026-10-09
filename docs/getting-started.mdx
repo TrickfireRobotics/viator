@@ -4,39 +4,28 @@ description: Set up a development environment for the Viator rover software.
 slug: /
 ---
 
-This is the software for **Viator**, Trickfire Robotics' rover for the [University Rover
-Challenge](https://urc.marssociety.org/), built on [ROS 2 Humble](https://docs.ros.org/en/humble/).
+This is the software for **Viator**, Trickfire Robotics' rover for the [University Rover Challenge](https://urc.marssociety.org/), built on [ROS 2 Humble](https://docs.ros.org/en/humble/).
 
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/)
-- [Visual Studio Code](https://code.visualstudio.com/) with the
-  [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-  extension
+- [Visual Studio Code](https://code.visualstudio.com/) with the [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
 
-Development happens inside a Docker container so every contributor gets the same ROS 2 Humble
-environment, regardless of host OS.
+Development happens inside a Docker container so every contributor gets the same ROS 2 Humble environment, regardless of host OS.
 
 ## Set up the dev container
 
 1. Clone the repo (with submodules):
 
     ```bash title="Terminal"
-    git clone --recurse-submodules https://github.com/TrickfireRobotics/urc-2023.git
+    git clone --recurse-submodules https://github.com/TrickfireRobotics/viator.git
     ```
 
-2. Open the folder in VS Code and choose **Reopen in Container** when prompted (or run
-   **Dev Containers: Reopen in Container** from the command palette). This uses
-   `.devcontainer/docker-compose.yml` to build `.devcontainer/Dockerfile` (which installs
-   ROS 2 Humble, the CAN/motor tooling, and the
-   [myactuator_rmd](https://github.com/2b-t/myactuator_rmd) library) and starts it as a
-   container named `viator`, so it's easy to find with `docker ps`.
+2. Open the folder in VS Code and choose **Reopen in Container** when prompted (or run **Dev Containers: Reopen in Container** from the command palette). This uses `.devcontainer/docker-compose.yml` to build `.devcontainer/Dockerfile` (which installs ROS 2 Humble, the CAN/motor tooling, and the [myactuator_rmd](https://github.com/2b-t/myactuator_rmd) library) and starts it as a container named `viator`, so it's easy to find with `docker ps`.
 
 ## Build and launch
 
-All common actions are exposed as `make` targets from the repo root — see
-[Launching the Rover](launching) for the full workflow. The short version, from inside the
-container:
+All common actions are exposed as `make` targets from the repo root — see [Launching the Rover](launching) for the full workflow. The short version, from inside the container:
 
 ```bash title="Terminal"
 make build   # colcon build --symlink-install
@@ -51,20 +40,15 @@ make launch  # ros2 launch viator_launch robot.launch.py
 
 ## Formatting and linting
 
-Python is formatted/linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with
-[mypy](https://mypy-lang.org/); shell scripts are formatted with
-[shfmt](https://github.com/mvdan/sh). Install the recommended VS Code extensions when prompted,
-or run everything manually:
+Python is formatted/linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with [mypy](https://mypy-lang.org/); shell scripts are formatted with [shfmt](https://github.com/mvdan/sh). Install the recommended VS Code extensions when prompted, or run everything manually:
 
 ```bash title="Terminal"
 make format
 ```
 
-Run `make hooks` once after cloning to install the pre-commit hooks that enforce this
-automatically at commit time.
+Run `make hooks` once after cloning to install the pre-commit hooks that enforce this automatically at commit time.
 
 ## Where to go next
 
 - [Architecture](architecture) — what each ROS package does and how they fit together.
-- [Launching the Rover](launching) — the full build → CAN setup → launch workflow, including
-  deploying to the onboard Orin.
+- [Launching the Rover](launching) — the full build → CAN setup → launch workflow, including deploying to the onboard Orin.

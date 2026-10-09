@@ -7,11 +7,9 @@ from launch_ros.actions import Node
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 
 can_moteus_node = Node(package="can_moteus", executable="can_moteus", name="can_moteus_node")
-
-
 drivebase_node = Node(package="drivebase", executable="drivebase", name="drivebase_node")
 
-# Runs as root via sudo: opening the raw CAN socket for can1 needs CAP_NET_RAW/NET_ADMIN,
+# Runs as root via sudo: opening the raw CAN socket for can0 needs CAP_NET_RAW/NET_ADMIN,
 # which the non-root trickfire user doesn't have (see .devcontainer/trickfire-can-sudoers).
 can_rmdx8_node = Node(
     package="can_rmdx8",
@@ -54,7 +52,7 @@ launch_include = IncludeLaunchDescription(
 def generate_launch_description() -> launch.LaunchDescription:  # pylint: disable=invalid-name
     return launch.LaunchDescription(
         [
-            can_moteus_node,
+            # can_moteus_node, (dsabeled for now cause arm is not implemented)
             drivebase_node,
             can_rmdx8_node,
             mission_control_updater_node,

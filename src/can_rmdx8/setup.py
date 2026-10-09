@@ -13,10 +13,9 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="trickfire@todo.todo",
-    description="TODO: Package description",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Controls RMDx8 motors over CAN",
+    license="Apache-2.0",
     entry_points={
         "console_scripts": ["can_rmdx8 = can_rmdx8.rmdx8_motor_manager:main"],
     },

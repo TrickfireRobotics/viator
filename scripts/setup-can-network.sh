@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Commands
 START_CMD="8800000000000000"
@@ -11,10 +12,10 @@ sudo modprobe can_raw
 sudo modprobe mttcan
 
 # Set up the CAN interface
-sudo ip link set can1 down
-sudo ip link set can1 type can bitrate 1000000
-sudo ip link set can1 up
-echo "CAN interface can1 set up successfully."
+sudo ip link set can0 down
+sudo ip link set can0 type can bitrate 1000000
+sudo ip link set can0 up
+echo "CAN interface can0 set up successfully."
 
 # Motor CAN IDs (hexadecimal)
 MOTOR_IDS=("155" "156" "157" "158" "159" "15A")
@@ -22,15 +23,15 @@ MOTOR_IDS=("155" "156" "157" "158" "159" "15A")
 # Enable motors in speed mode
 for CAN_ID in "${MOTOR_IDS[@]}"; do
     echo "Sending clear command to CAN ID 0x$CAN_ID: $CLEAR_CMD"
-    sudo cansend can1 "$CAN_ID#$CLEAR_CMD"
+    sudo cansend can0 "$CAN_ID#$CLEAR_CMD"
     sleep 0.1
 
     echo "Sending start command to CAN ID 0x$CAN_ID: $START_CMD"
-    sudo cansend can1 "$CAN_ID#$START_CMD"
+    sudo cansend can0 "$CAN_ID#$START_CMD"
     sleep 0.1
 
     echo "Sending speed mode command to CAN ID 0x$CAN_ID: $SPEED_CMD"
-    sudo cansend can1 "$CAN_ID#$SPEED_CMD"
+    sudo cansend can0 "$CAN_ID#$SPEED_CMD"
     sleep 0.1
 done
 
