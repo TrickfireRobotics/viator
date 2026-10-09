@@ -7,7 +7,9 @@
     "files.exclude": {
         "**/node_modules": true,
         "**/.mypy_cache": true,
-        "**/.ruff_cache": true
+        "**/.ruff_cache": true,
+        "**/.pytest_cache": true,
+        "**/__pycache__": true
     },
 
     /* ------------------------------- formatting ------------------------------- */
