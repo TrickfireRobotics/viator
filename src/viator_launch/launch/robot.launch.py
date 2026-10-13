@@ -31,16 +31,14 @@ drivebase_node = Node(
     on_exit=Shutdown(),
 )
 
-# Runs as root via sudo: opening the raw CAN socket for can1 needs CAP_NET_RAW/NET_ADMIN,
-# which the non-root trickfire user doesn't have (see .devcontainer/trickfire-can.sudoers).
-# Bytecode writing is off because --symlink-install points install/ back into src/, so a
-# root-run node leaves root-owned __pycache__ in the source tree that no one else can clear.
+# Has to run as trickfire like the rest of the graph, not under sudo: FastDDS falls back to
+# shared memory for same-host traffic and those /dev/shm segments are 0644, so a root node
+# and a trickfire node discover each other but silently exchange no data. Opening an AF_CAN
+# raw socket needs no capability anyway (unlike AF_INET), only bringing the link up does.
 can_rmdx8_node = Node(
     package="can_rmdx8",
     executable="can_rmdx8",
     name="can_rmdx8_node",
-    prefix="sudo -n --",
-    additional_env={"PYTHONDONTWRITEBYTECODE": "1"},
     output_format=LINE_ONLY,
     on_exit=Shutdown(),
 )
