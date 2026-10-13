@@ -93,7 +93,8 @@ inside() {
     if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
         color=1
     fi
-    compose exec -T -e "VIATOR_COLOR=${color}" "$COMPOSE_SERVICE" "$@"
+    compose exec -T -e "VIATOR_COLOR=${color}" -e "CAN_IFACE=${CAN_IFACE}" \
+        "$COMPOSE_SERVICE" "$@"
 }
 
 requireCommand() {
@@ -138,8 +139,12 @@ printHeaderHelp() {
 
 # ---------------------------------- CAN bus --------------------------------- #
 
-CAN_IFACE="${CAN_IFACE:-can1}"
+# Which SocketCAN interface the drivebase is wired to. can0 on the rover; override for a
+# bench setup on different hardware. Everything that touches the bus reads it from here,
+# including can_rmdx8, which picks it up from the environment.
+CAN_IFACE="${CAN_IFACE:-can0}"
 readonly CAN_IFACE
+export CAN_IFACE
 
 canExists() {
     ip link show "$CAN_IFACE" >/dev/null 2>&1
@@ -247,5 +252,5 @@ delegateToContainer() {
 
     # `compose` is a function and exec can't exec one, so spell the command out
     exec docker compose -f "$COMPOSE_FILE" exec \
-        "${tty_args[@]+"${tty_args[@]}"}" "$COMPOSE_SERVICE" "$@"
+        "${tty_args[@]+"${tty_args[@]}"}" -e "CAN_IFACE=${CAN_IFACE}" "$COMPOSE_SERVICE" "$@"
 }

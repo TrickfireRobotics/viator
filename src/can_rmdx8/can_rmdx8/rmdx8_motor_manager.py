@@ -1,3 +1,4 @@
+import os
 import sys
 from collections import deque
 from collections.abc import Sequence
@@ -28,11 +29,16 @@ class RMDx8MotorManager(Node):
     # String identifier for updating motor state
     _UPDATE_STATE = "UPDATE_STATE"
 
+    # Matches the default in scripts/lib/common.sh, which exports CAN_IFACE into the
+    # container, so overriding it there is enough to move the whole stack to another bus.
+    _DEFAULT_CAN_IFACE = "can0"
+
     def __init__(self) -> None:
         super().__init__("can_rmdx8_node")
         self.get_logger().info(colorStr("Launching can_rmdx8 node", ColorCodes.BLUE_OK))
         self._id_to_rmdx8_motor: dict[int, RMDx8Motor] = {}
-        self.driver = rmd.CanDriver("can1")
+        self._can_iface = os.environ.get("CAN_IFACE") or self._DEFAULT_CAN_IFACE
+        self.driver = rmd.CanDriver(self._can_iface)
         self._driver_lock = Lock()
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
@@ -42,9 +48,10 @@ class RMDx8MotorManager(Node):
         self.create_timer(0.005, self._handleRequests)
 
         self._status = StatusReporter(self, "can_rmdx8")
-        self._status.ok(f"{self.motorCount()} motors on can1")
-        self.health.setStatusReporter(self._status, f"{self.motorCount()} motors on can1")
-        self.get_logger().info(f"can_rmdx8 ready, {self.motorCount()} motors on can1")
+        summary = f"{self.motorCount()} motors on {self._can_iface}"
+        self._status.ok(summary)
+        self.health.setStatusReporter(self._status, summary)
+        self.get_logger().info(f"can_rmdx8 ready, {summary}")
 
     def _createSubscriber(self, config: RMDx8MotorConfig) -> Subscription:
         can_id = config.can_id

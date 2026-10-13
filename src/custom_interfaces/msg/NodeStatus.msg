@@ -14,5 +14,5 @@ string name
 # One of the constants above.
 uint8 state
 
-# Short human-readable context, e.g. "6 motors on can1". May be empty.
+# Short human-readable context, e.g. "6 motors on can0". May be empty.
 string detail

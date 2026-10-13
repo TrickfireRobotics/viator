@@ -17,14 +17,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 # mttcan is the Tegra SoC's built-in CAN controller driver - it doesn't exist for any
 # other hardware, so this would otherwise fail confusingly at modprobe on a laptop.
-requireOrin "can1 or the mttcan driver"
+requireOrin "the CAN hardware or the mttcan driver"
 
 # Commands
 START_CMD="8800000000000000"
 CLEAR_CMD="9B00000000000000"
 SPEED_CMD="A200000000000000"
 
-IFACE="${CAN_IFACE:-can1}"
+IFACE="$CAN_IFACE"
 BITRATE=1000000
 
 # Motor CAN IDs (hexadecimal)

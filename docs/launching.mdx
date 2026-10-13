@@ -25,7 +25,7 @@ Five phases, each reporting before it runs anything, so a failure tells you whic
   [ ok ] compose                v2.33.0
   [ ok ] workspace              /home/trickfire/viator (main @ a1b2c3d)
   [2/5] can bus
-  [ ok ] can1                   up at 1000000 bit/s
+  [ ok ] can0                   up at 1000000 bit/s
   [3/5] container
   [ ok ] image viator:dev       done
   [ ok ] container viator       done
@@ -38,7 +38,7 @@ Five phases, each reporting before it runs anything, so a failure tells you whic
 | Phase       | Does                                                                            |
 | ----------- | ------------------------------------------------------------------------------- |
 | `host`      | Docker is installed and its daemon is reachable, and reports which commit you're about to run |
-| `can bus`   | `can1` is up at 1 Mbit, and brings it up if it isn't                            |
+| `can bus`   | `can0` is up at 1 Mbit, and brings it up if it isn't                            |
 | `container` | Builds the `viator:dev` image if anything changed, and starts the container      |
 | `workspace` | `colcon build` inside the container                                              |
 | `rover`     | Starts the node graph, then opens the dashboard on top of it                      |
@@ -60,7 +60,7 @@ Then it hands you the dashboard. Press `?` in there for the keys, `q` to quit.
 
 ## Make CAN bringup automatic
 
-`make launch` brings `can1` up when it finds it down, which costs a sudo prompt every time. Do it once per rover and the bus is already up before anyone logs in:
+`make launch` brings `can0` up when it finds it down, which costs a sudo prompt every time. Do it once per rover and the bus is already up before anyone logs in:
 
 ```bash title="Terminal (on the rover)"
 make can-service
@@ -74,6 +74,16 @@ The unit points at the checkout it was installed from, so if the repo moves, run
     For a one-shot bringup without touching systemd - a bus that dropped mid-session, or a machine
     you don't want to change - `make can-setup` does just the bringup.
 </Callout>
+
+### Using a different interface
+
+The drivebase is on `can0`. Everything that touches the bus, including `can_rmdx8`, reads the interface from `CAN_IFACE`, so a bench setup wired differently only needs it set once:
+
+```bash title="Terminal"
+CAN_IFACE=can1 make launch
+```
+
+It is passed through into the container, so the scripts and the node always agree on which bus they are talking about.
 
 ## Flags
 
@@ -123,7 +133,7 @@ make            # list every target
 │  module                   state     detail                          │
 │  arm                      ok        mode disabled                   │
 │  camera                   ok        2 cameras: [0, 1]               │
-│  can_rmdx8                ok        6 motors on can1                │
+│  can_rmdx8                ok        6 motors on can0                │
 │  drivebase                ok        awaiting commands               │
 │  heartbeat                ok        awaiting mission control        │
 │  mission_control_updater  ok                                        │
@@ -143,7 +153,7 @@ make status
 
   [ ok ] image                  viator:dev
   [ ok ] container              viator running
-  [ ok ] can1                   up at 1000000 bit/s
+  [ ok ] can0                   up at 1000000 bit/s
   [ ok ] motors                 all 6 responding
   [ ok ] cameras                2 video device(s): /dev/video0 /dev/video1
   [ ok ] rosbridge              listening on 9090
@@ -228,10 +238,10 @@ candump any
 <Accordions>
     <Accordion title="make launch asks for sudo every time">
         It only does that when it has to bring the bus up itself. `make can-service` installs the
-        systemd unit that does it at boot, after which `make launch` finds `can1` already up and
+        systemd unit that does it at boot, after which `make launch` finds `can0` already up and
         never needs root.
     </Accordion>
-    <Accordion title="can1: interface not present">
+    <Accordion title="can0: interface not present">
         There is no CAN hardware on this host, or the transceiver isn't powered. On the Orin, check
         the harness at the expansion header (see [Viator Orin](./orin.mdx)) and `dmesg` for the
         `mttcan` driver. On a laptop this is expected - the rover needs real hardware to run.
