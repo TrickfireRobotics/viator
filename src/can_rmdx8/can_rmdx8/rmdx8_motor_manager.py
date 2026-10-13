@@ -12,7 +12,6 @@ from rclpy.node import Node
 from rclpy.subscription import Subscription
 from std_msgs.msg import String
 
-from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs, RMDx8MotorConfig
 from lib.node_runner import runNodes
 from lib.status import StatusReporter
@@ -35,7 +34,6 @@ class RMDx8MotorManager(Node):
 
     def __init__(self) -> None:
         super().__init__("can_rmdx8_node")
-        self.get_logger().info(colorStr("Launching can_rmdx8 node", ColorCodes.BLUE_OK))
         self._id_to_rmdx8_motor: dict[int, RMDx8Motor] = {}
         self._can_iface = os.environ.get("CAN_IFACE") or self._DEFAULT_CAN_IFACE
         self.driver = rmd.CanDriver(self._can_iface)

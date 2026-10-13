@@ -43,7 +43,6 @@ class Drivebase(Node):
 
     def __init__(self) -> None:
         super().__init__("drivebase")
-        self.get_logger().info(colorStr("Launching drivebase node", ColorCodes.BLUE_OK))
         self.bot_interface = RobotInterface(self)
 
         self.left_subscription = self.create_subscription(

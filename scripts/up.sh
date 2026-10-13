@@ -44,12 +44,16 @@ if inContainer; then
     die "run this on the rover's host, not inside the container (inside, use 'make graph')"
 fi
 
+# A step that paints a live pane leaves the cursor hidden, so put it back whatever
+# happens, including a Ctrl-C part way through a build.
+trap 'printf "\033[?25h"' EXIT INT TERM
+
 banner "bringing the rover up"
 
 # ***************
 # 1. Host
 # ***************
-step "1/5" "host"
+section "host"
 
 if isOrin; then
     ok "platform" "$(platformName)"
@@ -67,12 +71,12 @@ ok "compose" "$(docker compose version --short 2>/dev/null)"
 revision="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 git diff --quiet HEAD 2>/dev/null || revision="${revision}-dirty"
-ok "workspace" "${REPO_ROOT} (${branch} @ ${revision})"
+ok "workspace" "${branch} @ ${revision}  ${REPO_ROOT}"
 
 # ***************
 # 2. CAN bus
 # ***************
-step "2/5" "can bus"
+section "can bus"
 
 if [ "$skip_can" = true ]; then
     warn "$CAN_IFACE" "skipped with -s, can_rmdx8 will fail to open the bus"
@@ -102,7 +106,7 @@ fi
 # ***************
 # 3. Container
 # ***************
-step "3/5" "container"
+section "container"
 
 build_args=("$COMPOSE_SERVICE")
 [ "$no_cache" = true ] && build_args=(--no-cache "$COMPOSE_SERVICE")
@@ -117,7 +121,7 @@ containerRunning || die "the container isn't running, check 'docker logs $COMPOS
 # ***************
 # 4. Workspace
 # ***************
-step "4/5" "workspace"
+section "workspace"
 
 if [ "$skip_build" = true ]; then
     warn "colcon build" "skipped with -B"
@@ -129,7 +133,7 @@ fi
 # ***************
 # 5. Rover
 # ***************
-step "5/5" "rover"
+section "rover"
 
 # Hand over rather than wrapping: the dashboard needs this terminal, and this is the last
 # thing the script does.

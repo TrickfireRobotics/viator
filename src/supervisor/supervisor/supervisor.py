@@ -3,7 +3,7 @@ Turns the per-node reports on `/viator/node_status` into one readable answer to
 "is the rover ready".
 
 Without this, judging readiness meant scrolling a launch log and knowing which lines were
-load-bearing. This prints one block once the expected nodes have checked in, and after
+load-bearing. This says ready or not once the expected nodes have checked in, and after
 that only speaks up when something changes state.
 """
 
@@ -157,32 +157,28 @@ class Supervisor(Node):
 
     def _printSummary(self, now: float) -> None:
         """
-        Logs the startup block: one line per expected module.
+        Logs one line saying whether the rover came up.
+
+        This used to print a block with a line per module. The dashboard shows that table
+        continuously and keeps it current, so repeating it in the log was the same
+        information twice, once in the place where it goes stale. What the log is for is
+        the moment readiness was decided, and what was wrong if it wasn't.
         """
-        width = max(len(name) for name in self._expected) if self._expected else 0
-        lines = ["viator status"]
+        labels = self._currentLabels(now)
+        ready = [name for name, label in labels.items() if label == STATE_NAMES[NodeStatus.OK]]
 
-        for name in self._expected:
-            record = self._records.get(name)
-            label = MISSING if record is None else record.label(now)
-            detail = record.detail if record is not None else ""
-            state = colorStr(label.ljust(9), _labelColor(label))
-            lines.append(f"  {name.ljust(width)}  {state}  {detail}".rstrip())
+        if len(ready) == len(labels):
+            self.get_logger().info(
+                colorStr(f"all {len(labels)} modules ready", ColorCodes.GREEN_OK)
+            )
+            return
 
-        unexpected = sorted(set(self._records) - set(self._expected))
-        for name in unexpected:
-            record = self._records[name]
-            lines.append(f"  {name.ljust(width)}  {record.label(now).ljust(9)}  {record.detail}")
-
-        ready = all(
-            label == STATE_NAMES[NodeStatus.OK] for label in self._currentLabels(now).values()
+        problems = ", ".join(
+            f"{name} {label}" for name, label in labels.items() if name not in ready
         )
-        if ready:
-            lines.append(colorStr("  all modules ready", ColorCodes.GREEN_OK))
-        else:
-            lines.append(colorStr("  rover is NOT ready", ColorCodes.FAIL_RED))
-
-        self.get_logger().info("\n".join(lines))
+        self.get_logger().error(
+            colorStr(f"{len(ready)}/{len(labels)} modules ready - {problems}", ColorCodes.FAIL_RED)
+        )
 
     def _reportChanges(self, now: float) -> None:
         """

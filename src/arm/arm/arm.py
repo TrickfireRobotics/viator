@@ -5,7 +5,6 @@ from rclpy.node import Node
 from std_msgs.msg import Int32
 
 from custom_interfaces.srv import ArmMode
-from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_interface import RobotInterface
 from lib.node_runner import runNodes
@@ -24,7 +23,6 @@ class ArmModeEnum(IntEnum):
 class Arm(Node):
     def __init__(self) -> None:
         super().__init__("arm_node")
-        self.get_logger().info(colorStr("Launching arm_node", ColorCodes.BLUE_OK))
 
         self.change_arm_mode_sub = self.create_subscription(
             Int32, "update_arm_mode", self.updateArmMode, 10

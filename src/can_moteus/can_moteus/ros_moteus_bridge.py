@@ -36,7 +36,6 @@ class RosMotuesBridge(Node):
 
     def __init__(self) -> None:
         super().__init__("can_moteus_node")
-        self.get_logger().info(colorStr("Launching can_moteus node", ColorCodes.BLUE_OK))
 
         self.thread_manager: moteus_thread_manager.MoteusThreadManager | None = None
 

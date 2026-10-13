@@ -1,9 +1,13 @@
 """
-The Viator terminal dashboard: module status on top, live log underneath.
+The Viator terminal dashboard: module status on top, live log and CAN traffic underneath.
 
-Reads `/viator/node_status` for the status pane and follows the launch-output file for the
-log pane. The file is used alongside `/rosout` so startup output, Python tracebacks, and
-native-library warnings are present even when the dashboard opens after the graph starts.
+Reads `/viator/node_status` for the status pane, follows the launch-output file for the
+log pane, and follows `candump` for the bus pane. The file is used alongside `/rosout` so
+startup output, Python tracebacks, and native-library warnings are present even when the
+dashboard opens after the graph starts.
+
+Everything here draws on a transparent background on purpose: the dashboard sits in the
+operator's terminal, so it borrows their colours rather than painting over them.
 """
 
 import base64
@@ -16,17 +20,17 @@ from pathlib import Path
 from typing import ClassVar
 
 from rcl_interfaces.msg import Log
-from rich.markup import escape
+from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding, BindingType
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
 from lib.status import STATE_NAMES
 
-from .bridge import LogRecord, RosBridge, StatusRecord
+from .bridge import CAN_IFACE, CanFrame, LogRecord, RosBridge, StatusRecord
 
 # Levels the `f` key cycles through, as a minimum threshold.
 LEVEL_CYCLE = [Log.DEBUG, Log.INFO, Log.WARN, Log.ERROR]
@@ -38,12 +42,22 @@ LEVEL_LABELS = {
     Log.ERROR: "error",
 }
 
-LEVEL_STYLES = {
+# The level marker is a gutter rather than a word: `INFO` down the left of four hundred
+# lines is four hundred repetitions of the least interesting thing on each one. A bar
+# that only changes colour when something is wrong reads at a glance and costs no width.
+LEVEL_GUTTER = {
+    Log.DEBUG: ("┊", "dim"),
+    Log.INFO: ("│", "dim"),
+    Log.WARN: ("┃", "yellow"),
+    Log.ERROR: ("┃", "bold red"),
+    Log.FATAL: ("┃", "bold white on red"),
+}
+
+MESSAGE_STYLES = {
     Log.DEBUG: "dim",
-    Log.INFO: "green",
     Log.WARN: "yellow",
-    Log.ERROR: "bold red",
-    Log.FATAL: "bold white on red",
+    Log.ERROR: "red",
+    Log.FATAL: "bold red",
 }
 
 STATE_STYLES = {
@@ -53,8 +67,30 @@ STATE_STYLES = {
     NodeStatus.FAILED: "bold red",
 }
 
+STALE_STYLE = "bold red"
+
+# One colour per CAN id, picked from the id itself so a given motor keeps its colour for
+# the whole run. Six motors all in one colour is a wall of hex; six colours is a pattern
+# you can see break when one of them stops answering.
+BUS_ID_STYLES = ("cyan", "magenta", "green", "blue", "bright_cyan", "bright_magenta")
+
+# Width of the node column in the log. Long enough for every module name the rover has.
+NODE_WIDTH = 15
+
+# Everything to the left of a log message: `HH:MM:SS`, the level gutter, the module, and
+# a space before the message starts.
+PREFIX_WIDTH = 8 + 3 + NODE_WIDTH + 1
+
 # Enough history to scroll back through a run without growing without bound.
 BUFFER_SIZE = 5000
+
+# The bus pane is a window on live traffic, not a record of it, so it keeps far less.
+BUS_BUFFER_SIZE = 500
+
+# Frames arrive faster than a terminal can usefully redraw, so they are batched onto the
+# UI thread on a timer instead of one call per frame.
+BUS_DRAIN_PERIOD_SEC = 0.1
+BUS_DRAIN_LIMIT = 24
 
 # Matches the supervisor: a module republishes every second, so three misses means gone.
 STALE_AFTER_SEC = 3.0
@@ -68,6 +104,7 @@ HELP_TEXT = f"""[bold]keys[/bold]
   [cyan]p[/cyan]  pause the log, so you can read it. nothing is lost while paused
   [cyan]f[/cyan]  cycle the minimum severity: info+ -> warn+ -> error -> debug+
   [cyan]/[/cyan]  filter the log by text. enter applies it, esc clears it
+  [cyan]b[/cyan]  show or hide the bus pane, to give the log the full width
   [cyan]c[/cyan]  copy every visible line to your clipboard, local machine included
   [cyan]s[/cyan]  save every visible line under ~/.ros/viator-tui
   [cyan]?[/cyan]  this
@@ -80,10 +117,12 @@ HELP_TEXT = f"""[bold]keys[/bold]
   [bold red]failed[/bold red]    running, but can't do its job at all
   [bold red]stale[/bold red]     stopped reporting for {int(STALE_AFTER_SEC)}s, so it died or hung
 
-[bold]log source[/bold]
-  the pane follows the launch output, including ROS logs, tracebacks, and native
-  library warnings:
-    [cyan]{LAUNCH_LOG_HINT}[/cyan]
+[bold]the panes[/bold]
+  [cyan]modules[/cyan]  what each module says about itself, once a second
+  [cyan]log[/cyan]      the launch output: ROS logs, tracebacks, native warnings
+             [dim]{LAUNCH_LOG_HINT}[/dim]
+  [cyan]{CAN_IFACE:<8}[/cyan] raw frames on the bus, as candump sees them. an empty pane
+             with healthy modules means nothing is reaching the wire
 
 [dim]? or esc to close[/dim]"""
 
@@ -108,12 +147,33 @@ def _copyToClipboard(app: App[None], text: str) -> str:
     return "copied to clipboard (osc52)"
 
 
+def shortNodeName(name: str) -> str:
+    """
+    The module name out of a ROS node name.
+
+    `/can_rmdx8_node` and `can_rmdx8` are the same module to anyone reading the log, and
+    the column is narrow, so spend its width on the part that differs.
+    """
+    short = name.lstrip("/").rsplit("/", 1)[-1]
+    if short.endswith("_node"):
+        short = short[: -len("_node")]
+    if len(short) > NODE_WIDTH:
+        return short[: NODE_WIDTH - 1] + "…"
+    return short
+
+
 class ViatorTui(App[None]):
     """
     The dashboard application.
     """
 
     TITLE = "viator"
+
+    # The one theme whose colours are the terminal's own. Everything else in Textual
+    # paints an opaque surface underneath itself, so this is what makes the dashboard sit
+    # in the operator's terminal instead of on top of it, and it means the dashboard
+    # matches whatever palette they already run.
+    THEME = "ansi-dark"
 
     CSS = """
     Screen {
@@ -122,37 +182,91 @@ class ViatorTui(App[None]):
         background: transparent;
     }
 
-    #status, #log-pane, #log, #search {
+    /* The dashboard is a frame around the terminal's own background, not a replacement
+       for it, so nothing below here paints a surface of its own. */
+    Header, HeaderIcon, HeaderTitle, HeaderClock, HeaderClockSpace,
+    Footer, FooterKey, DataTable, RichLog, Input, Vertical, Horizontal {
         background: transparent;
+    }
+
+    FooterKey .footer-key--key, FooterKey .footer-key--description {
+        background: transparent;
+    }
+
+    DataTable .datatable--header, DataTable .datatable--odd-row,
+    DataTable .datatable--even-row, DataTable .datatable--cursor,
+    DataTable .datatable--hover {
+        background: transparent;
+    }
+
+    DataTable .datatable--header {
+        text-style: dim;
+    }
+
+    RichLog, DataTable {
+        scrollbar-background: transparent;
+        scrollbar-background-hover: transparent;
+        scrollbar-background-active: transparent;
+        scrollbar-size: 1 1;
     }
 
     #status {
         height: auto;
-        max-height: 12;
-        border: round $accent;
+        max-height: 14;
+        border: round $border;
         border-title-align: left;
+        border-subtitle-align: right;
         padding: 0 1;
     }
 
+    #panes {
+        height: 1fr;
+    }
+
     #log-pane {
-        border: round $accent;
+        width: 1fr;
+        border: round $border;
         border-title-align: left;
+        border-subtitle-align: right;
     }
 
     #log {
         padding: 0 1;
+        overflow-x: hidden;
+    }
+
+    #bus-pane {
+        width: 38;
+        border: round $border;
+        border-title-align: left;
+        border-subtitle-align: right;
+    }
+
+    #bus-pane.hidden {
+        display: none;
+    }
+
+    #bus {
+        padding: 0 1;
+        overflow-x: hidden;
+        /* A live feed, not a document: there is nothing to scroll back to, so the bar
+           would only ever be decoration sitting in the narrowest pane. */
+        scrollbar-size-vertical: 0;
     }
 
     #search {
         display: none;
         border: none;
         height: 1;
+        padding: 0 1;
     }
 
     #search.visible {
         display: block;
     }
 
+    /* The one thing that does get a background: it sits on top of the log and has to be
+       readable against whatever is under it. */
     #help {
         layer: overlay;
         display: none;
@@ -160,9 +274,11 @@ class ViatorTui(App[None]):
         max-width: 80;
         height: auto;
         max-height: 100%;
-        border: round $accent;
+        border: round $border;
         border-title-align: left;
-        background: $surface;
+        /* The one opaque thing in the whole dashboard: it covers the log while it's
+           open, so it has to hide what's underneath rather than blend into it. */
+        background: ansi_black;
         padding: 1 2;
         offset: 3 1;
     }
@@ -177,6 +293,7 @@ class ViatorTui(App[None]):
         Binding("p", "toggle_pause", "pause"),
         Binding("f", "cycle_level", "level"),
         Binding("slash", "focus_search", "search"),
+        Binding("b", "toggle_bus", "bus"),
         Binding("c", "copy", "copy"),
         Binding("s", "save", "save"),
         Binding("question_mark", "toggle_help", "help"),
@@ -191,6 +308,12 @@ class ViatorTui(App[None]):
         self._status: dict[str, StatusRecord] = {}
         self._status_seen: dict[str, float] = {}
 
+        self._bus_pending: deque[CanFrame] = deque(maxlen=BUS_BUFFER_SIZE)
+        self._bus_ids: set[str] = set()
+        self._bus_count = 0
+        self._bus_rate = 0
+        self._bus_state = "waiting"
+
         self._paused = False
         self._level_index = LEVEL_CYCLE.index(Log.INFO)
         self._search = ""
@@ -199,51 +322,65 @@ class ViatorTui(App[None]):
             on_status=self._handleStatus,
             on_log=self._handleLog,
             launch_log=Path(LAUNCH_LOG_HINT),
+            on_frame=self._bus_pending.append,
+            on_bus_state=self._handleBusState,
         )
 
     # ***************
     # Composition and lifecycle
     # ***************
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Header(show_clock=True, icon="●")
 
         table: DataTable[Text] = DataTable(id="status", cursor_type="none", zebra_stripes=False)
         table.border_title = "modules"
         yield table
 
-        with Vertical(id="log-pane") as pane:
-            pane.border_title = "log"
-            yield Input(placeholder="filter text, enter to apply", id="search")
-            yield RichLog(id="log", markup=True, wrap=True, highlight=False, auto_scroll=True)
+        with Horizontal(id="panes"):
+            with Vertical(id="log-pane") as log_pane:
+                log_pane.border_title = "log"
+                yield Input(placeholder="filter text, enter to apply", id="search")
+                yield RichLog(id="log", wrap=True, highlight=False, auto_scroll=True, min_width=0)
 
-        help_panel = Static(HELP_TEXT, id="help")
+            with Vertical(id="bus-pane") as bus_pane:
+                bus_pane.border_title = CAN_IFACE
+                yield RichLog(id="bus", wrap=False, highlight=False, auto_scroll=True, min_width=0)
+
+        help_panel = Static(HELP_TEXT, id="help", markup=True)
         help_panel.border_title = "how to read this"
         yield help_panel
 
         yield Footer()
 
     def on_mount(self) -> None:
+        self.theme = self.THEME
+
         table = self.query_one("#status", DataTable)
         table.add_columns("module", "state", "detail")
 
         self._bridge.start()
         self.set_interval(1.0, self._refreshStatus)
+        self.set_interval(1.0, self._refreshBusRate)
+        self.set_interval(BUS_DRAIN_PERIOD_SEC, self._drainBus)
         self._updateTitles()
 
     def on_unmount(self) -> None:
         self._bridge.stop()
 
     # ***************
-    # Callbacks from the rclpy thread
+    # Callbacks from the background threads
     # ***************
     def _handleStatus(self, record: StatusRecord) -> None:
         """
-        Called on the rclpy thread, so hand the work back to the UI thread.
+        Called off the UI thread, so hand the work back to it.
         """
         self.call_from_thread(self._applyStatus, record)
 
     def _handleLog(self, record: LogRecord) -> None:
         self.call_from_thread(self._applyLog, record)
+
+    def _handleBusState(self, state: str) -> None:
+        self._bus_state = state
 
     def _applyStatus(self, record: StatusRecord) -> None:
         self._status[record.name] = record
@@ -264,6 +401,24 @@ class ViatorTui(App[None]):
         if not self._paused and self._shouldShow(record):
             self.query_one("#log", RichLog).write(self._renderRecord(record))
 
+    def _drainBus(self) -> None:
+        """
+        Moves a batch of frames into the bus pane and recomputes the rate.
+
+        The bus runs at thousands of frames a second when the drivebase is moving. Drawing
+        every one of them would spend the whole frame budget on text nobody can read at
+        that speed, so this takes a slice and reports the rate for the rest.
+        """
+        pane = self.query_one("#bus", RichLog)
+        drained = 0
+        while self._bus_pending and drained < BUS_DRAIN_LIMIT:
+            frame = self._bus_pending.popleft()
+            self._bus_ids.add(frame.can_id)
+            self._bus_count += 1
+            drained += 1
+            if not self._paused:
+                pane.write(self._renderFrame(frame))
+
     # ***************
     # Rendering
     # ***************
@@ -277,15 +432,41 @@ class ViatorTui(App[None]):
             return False
         return True
 
-    def _renderRecord(self, record: LogRecord) -> str:
+    def _renderRecord(self, record: LogRecord) -> Table:
         """
-        One log line. The message is escaped so log text can't be read as rich markup.
+        One log line: timestamp, level gutter, module, message.
+
+        A two column grid rather than one string, so a message too long for the pane
+        wraps under itself instead of starting again at the left margin and breaking up
+        the column of timestamps that makes the log scannable.
         """
-        style = LEVEL_STYLES.get(record.level, "white")
-        return (
-            f"[dim]{record.clock}[/dim] "
-            f"[{style}]{record.level_name:<5}[/{style}] "
-            f"[cyan]{escape(record.node)}[/cyan]  {escape(record.message)}"
+        glyph, glyph_style = LEVEL_GUTTER.get(record.level, ("│", "dim"))
+        prefix = Text.assemble(
+            (record.clock, "dim"),
+            " ",
+            (glyph, glyph_style),
+            " ",
+            (shortNodeName(record.node), "cyan"),
+        )
+
+        line = Table.grid(expand=True)
+        line.add_column(width=PREFIX_WIDTH, no_wrap=True)
+        line.add_column(ratio=1, overflow="fold")
+        line.add_row(prefix, Text(record.message, style=MESSAGE_STYLES.get(record.level, "")))
+        return line
+
+    def _renderFrame(self, frame: CanFrame) -> Text:
+        """
+        One CAN frame: id, length, payload.
+        """
+        try:
+            style = BUS_ID_STYLES[int(frame.can_id, 16) % len(BUS_ID_STYLES)]
+        except ValueError:
+            style = "cyan"
+        return Text.assemble(
+            (frame.can_id.rjust(3), style),
+            (f" {frame.dlc} ", "dim"),
+            frame.data,
         )
 
     def _redrawLog(self) -> None:
@@ -309,31 +490,65 @@ class ViatorTui(App[None]):
         for name in sorted(self._status):
             record = self._status[name]
             if now - self._status_seen.get(name, 0.0) > STALE_AFTER_SEC:
-                state = Text("stale", style="bold red")
+                label, style = "stale", STALE_STYLE
             else:
-                state = Text(
-                    STATE_NAMES.get(record.state, "unknown"),
-                    style=STATE_STYLES.get(record.state, "white"),
-                )
-            table.add_row(Text(name), state, Text(record.detail))
+                label = STATE_NAMES.get(record.state, "unknown")
+                style = STATE_STYLES.get(record.state, "white")
+
+            module = Text.assemble(("● ", style), name)
+            table.add_row(module, Text(label, style=style), Text(record.detail, style="dim"))
 
         self._updateTitles()
 
+    def _refreshBusRate(self) -> None:
+        """
+        Turns a second's worth of frames into the rate shown on the bus pane.
+        """
+        self._bus_rate = self._bus_count
+        self._bus_count = 0
+        self._updateTitles()
+
+    def _statusSummary(self) -> Text:
+        """
+        The modules border subtitle: how many are fine and how many aren't.
+        """
+        now = time.monotonic()
+        healthy = sum(
+            1
+            for name, record in self._status.items()
+            if record.state == NodeStatus.OK
+            and now - self._status_seen.get(name, 0.0) <= STALE_AFTER_SEC
+        )
+        total = len(self._status)
+        if not total:
+            return Text("waiting for reports", style="dim")
+        style = "green" if healthy == total else "yellow"
+        return Text(f"{healthy}/{total} ok", style=style)
+
     def _updateTitles(self) -> None:
         """
-        Keeps the pane borders showing the current filter and pause state.
+        Keeps the pane borders showing what each pane is currently doing.
         """
-        level = LEVEL_LABELS[LEVEL_CYCLE[self._level_index]]
-        bits = [f"log  {level}"]
-        if self._search:
-            bits.append(f'"{self._search}"')
-        if self._paused:
-            bits.append("PAUSED")
-        self.query_one("#log-pane", Vertical).border_title = "  ".join(bits)
+        status = self.query_one("#status", DataTable)
+        status.border_subtitle = self._statusSummary()
 
-        self.query_one(
-            "#status", DataTable
-        ).border_title = f"modules  {len(self._status)} reporting"
+        log_pane = self.query_one("#log-pane", Vertical)
+        log_pane.border_title = f"log  {LEVEL_LABELS[LEVEL_CYCLE[self._level_index]]}"
+        state = []
+        if self._search:
+            state.append(f'"{self._search}"')
+        if self._paused:
+            state.append("paused")
+        log_pane.border_subtitle = "  ".join(state)
+
+        bus_pane = self.query_one("#bus-pane", Vertical)
+        if self._bus_state:
+            bus_pane.border_subtitle = Text(self._bus_state, style="dim")
+        else:
+            bus_pane.border_subtitle = Text(
+                f"{self._bus_rate}/s  {len(self._bus_ids)} ids",
+                style="dim" if self._bus_rate else "yellow",
+            )
 
     # ***************
     # Actions
@@ -364,6 +579,12 @@ class ViatorTui(App[None]):
         search = self.query_one("#search", Input)
         search.add_class("visible")
         search.focus()
+
+    def action_toggle_bus(self) -> None:
+        """
+        Hides the bus pane, for when the log is the thing you're reading.
+        """
+        self.query_one("#bus-pane", Vertical).toggle_class("hidden")
 
     def action_toggle_help(self) -> None:
         """
@@ -404,11 +625,7 @@ class ViatorTui(App[None]):
         """
         Copies everything currently visible in the log pane.
         """
-        text = "\n".join(
-            f"{r.clock} {r.level_name:<5} {r.node}  {r.message}"
-            for r in self._records
-            if self._shouldShow(r)
-        )
+        text = "\n".join(self._visibleLines())
         if not text:
             self.notify("nothing to copy", severity="warning")
             return
@@ -421,11 +638,7 @@ class ViatorTui(App[None]):
         The clipboard is convenient but a file is the thing you still have after a failed
         run, so both exist.
         """
-        lines = [
-            f"{r.clock} {r.level_name:<5} {r.node}  {r.message}"
-            for r in self._records
-            if self._shouldShow(r)
-        ]
+        lines = self._visibleLines()
         if not lines:
             self.notify("nothing to save", severity="warning")
             return
@@ -434,6 +647,16 @@ class ViatorTui(App[None]):
         path = SAVE_DIR / f"viator-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
         path.write_text("\n".join(lines) + "\n")
         self.notify(f"saved {len(lines)} lines to {path}")
+
+    def _visibleLines(self) -> list[str]:
+        """
+        The log as plain text, for the clipboard and for saving.
+        """
+        return [
+            f"{r.clock} {r.level_name:<5} {r.node}  {r.message}"
+            for r in self._records
+            if self._shouldShow(r)
+        ]
 
     # ***************
     # Widget events

@@ -32,7 +32,6 @@ class Heartbeat(Node):
         super().__init__("heartbeat_node")
 
         # print node name [debug purpose]
-        self.get_logger().info(colorStr("Launching heartbeat_node", ColorCodes.BLUE_OK))
 
         # robot interface: send data
         # robot info: retrieve data

@@ -1,7 +1,6 @@
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs
 from lib.interface.robot_info import RobotInfo
 from lib.node_runner import runNodes
@@ -13,9 +12,6 @@ from . import info_to_json_helper
 class MissionControlUpdater(Node):
     def __init__(self) -> None:
         super().__init__("mission_control_updater_node")
-        self.get_logger().info(
-            colorStr("Launching mission_control_updater_node", ColorCodes.BLUE_OK)
-        )
 
         self.publisher_to_mc = self.create_publisher(String, "mission_control_updater", 1)
 

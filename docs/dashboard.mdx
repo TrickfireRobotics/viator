@@ -1,12 +1,14 @@
 ---
 title: The Dashboard
-description: How to read and drive Viator's terminal dashboard - module status, the live log, and every key it responds to.
+description: How to read and drive Viator's terminal dashboard - module status, the live log, the CAN bus pane, and every key it responds to.
 slug: dashboard
 ---
 
-The dashboard is the terminal UI that answers "is the rover healthy, and if not, what broke". Module status sits on top, the live log underneath. It is what `make launch` opens for you, and you can open it on its own at any time against a rover that is already running.
+The dashboard is the terminal UI that answers "is the rover healthy, and if not, what broke". Module status sits on top; underneath, the live log on the left and raw CAN traffic on the right. It is what `make launch` opens for you, and you can open it on its own at any time against a rover that is already running.
 
-It is read-only. It subscribes to two topics and draws them. It cannot command the rover, and nothing you press in it can move a motor.
+It is read-only. It subscribes to two topics, follows the launch output, and runs `candump`. It cannot command the rover, and nothing you press in it can move a motor.
+
+It also draws on a transparent background and in your terminal's own sixteen colours, so it inherits whatever theme and opacity you already run rather than painting a grey rectangle over them.
 
 ## Opening it
 
@@ -34,32 +36,34 @@ Both work from the rover's host and from inside the dev container; the scripts f
 ## The layout
 
 ```text
- ⭘                                      viator                                  20:05:00
-╭─ modules  4 reporting ────────────────────────────────────────────────────────────────╮
+ ●                                      viator                                  20:05:00
+╭─ modules ─────────────────────────────────────────────────────────────────────────────╮
 │  module     state     detail                                                          │
-│  camera     ok        2 cameras: [0, 1]                                               │
-│  can_rmdx8  degraded  284/584 polls dropped in 5.0s                                   │
-│  drivebase  ok        awaiting commands                                               │
-│  heartbeat  starting                                                                  │
-╰───────────────────────────────────────────────────────────────────────────────────────╯
-╭─ log  info+ ──────────────────────────────────────────────────────────────────────────╮
-│ 20:05:00 INFO  drivebase  drivebase ready                                             │
-│ 20:05:00 WARN  can_rmdx8  CAN degraded: 284/584 polls dropped in 5.0s                 │
-│                                                                                       │
-╰───────────────────────────────────────────────────────────────────────────────────────╯
- q quit  p pause  f level  / search  c copy  s save  ? help
+│  ● camera     ok        2 cameras: [0, 1]                                             │
+│  ● can_rmdx8  degraded  284/584 polls dropped in 5.0s                                 │
+│  ● drivebase  ok        awaiting commands                                             │
+│  ● heartbeat  starting                                                                │
+╰────────────────────────────────────────────────────────────────────── 2/4 ok ─────────╯
+╭─ log  info+ ───────────────────────────────────╮╭─ can0 ───────────────────────────────╮
+│ 20:05:00 │ drivebase    drivebase ready        ││ 155 8 00 01 A0 3F 00 00 00 12        │
+│ 20:05:00 ┃ can_rmdx8    CAN degraded: 284/584  ││ 156 8 00 01 A0 3F 00 00 00 13        │
+│                         polls dropped in 5.0s  ││ 157 8 00 01 9F 3F 00 00 00 11        │
+│                                                ││ 15A 8 00 01 A0 3F 00 00 00 16        │
+╰────────────────────────────────────────────────╯╰──────────────────── 1847/s  6 ids ───╯
+ q quit  p pause  f level  / search  b bus  c copy  s save  ? help
 ```
 
-The two pane borders carry live state, so the pane titles are worth reading:
+Every pane border carries live state, so the titles are worth reading:
 
-- **`modules  4 reporting`** - how many modules have checked in at all. If a module you expect is missing from the table entirely, it never got far enough to report.
-- **`log  info+`** - the active filter. It also shows your text filter in quotes and the word `PAUSED` when the log is frozen, so there is never a mystery about why the log looks empty or frozen.
+- **`modules`** - the right-hand end says how many modules are `ok` out of how many are reporting at all. If a module you expect is missing from the table entirely, it never got far enough to report.
+- **`log  info+`** - the active filter. The right-hand end shows your text filter in quotes and the word `paused` when the log is frozen, so there is never a mystery about why the log looks empty or frozen.
+- **`can0`** - frames per second and how many distinct ids have been seen. The rate goes yellow at zero, because a silent bus with healthy modules is the interesting case.
 
 Press `?` at any time for the same reference this page gives, inside the app.
 
 ## Reading the modules pane
 
-Each node reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. A `Launching <node>` line in the log is printed at the top of a constructor and tells you nothing about whether the node works; this table is the thing that does.
+Each node reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. The coloured dot repeats the state so you can scan the column without reading it.
 
 | State      | Means                                                            | What to do                                                             |
 | ---------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -79,9 +83,39 @@ The detail column is the module's own one-line summary: how many motors it found
 
 ## Reading the log pane
 
-Each line is `time`, `level`, `node`, `message`, and the level is colour-coded. The pane replays and follows `log/launch-latest.log`, so it includes startup output and messages that do not go through a ROS logger, such as Python tracebacks.
+Each line is `time`, a level gutter, `module`, `message`. The gutter is one coloured bar rather than the word `INFO` repeated four hundred times: dim for info, yellow for a warning, red for an error. A message too long for the pane wraps underneath itself rather than back to the left margin, so the timestamps stay in one scannable column.
+
+The pane replays and follows `log/launch-latest.log`, so it includes startup output and messages that do not go through a ROS logger, such as Python tracebacks.
 
 The log defaults to `info+`. Press `f` to walk the threshold up to `warn+` and `error`, then round to `debug+`.
+
+<Callout type="info" title="Launch's own bookkeeping is at debug">
+    `process started with pid [...]`, `All log files can be found below ...` and the rest of
+    launch's startup chatter are logged at `debug`, so they are hidden by default. They are the same
+    dozen lines every run and they bury the lines that differ. Press `f` round to `debug+` if you
+    want them.
+</Callout>
+
+## Reading the bus pane
+
+The pane on the right runs `candump` on the interface the rover is wired to (`can0` unless `CAN_IFACE` says otherwise) and shows the frames going past: id, length, payload. Each id keeps its own colour for the whole run, so six motors answering in turn is a repeating pattern you can watch break when one of them stops.
+
+The modules table tells you what `can_rmdx8` believes about the bus. This tells you what is actually on the wire, which is the question you have when nothing is moving and every module still says `ok`:
+
+| What you see                      | Means                                                              |
+| --------------------------------- | ------------------------------------------------------------------ |
+| Frames scrolling, several ids     | The bus is working                                                 |
+| `0/s` in yellow, modules all `ok` | Nothing is reaching the wire - transceiver, wiring, or termination  |
+| Fewer ids than motors             | The missing ids are the motors that aren't answering               |
+| `can0 is not up`                  | The interface is down; `make can-setup` brings it up               |
+
+Press `b` to hide the pane and give the log the full width.
+
+<Callout type="info" title="It is a window, not a recording">
+    At full tilt the bus carries thousands of frames a second, far more than a terminal can draw.
+    The pane shows a sample and the border reports the true rate, so the number is trustworthy even
+    though the lines are not every frame.
+</Callout>
 
 <Callout type="idea" title="Pause first, then read">
     A log that is moving is a log you cannot read. Press `p` the moment you see something you want
@@ -91,16 +125,17 @@ The log defaults to `info+`. Press `f` to walk the threshold up to `warn+` and `
 
 ## Keys
 
-| Key   | Does                                                                      |
-| ----- | ------------------------------------------------------------------------- |
-| `p`   | Pause the log. Nothing is lost while paused                               |
-| `f`   | Cycle the minimum severity shown: `info+` → `warn+` → `error` → `debug+`  |
-| `/`   | Filter the log by text. Enter applies it                                  |
-| `esc` | Close the help panel, or clear the text filter                            |
-| `c`   | Copy every visible line to your clipboard                                 |
-| `s`   | Save every visible line to a file under `~/.ros/viator-tui`               |
-| `?`   | Show the help panel                                                       |
-| `q`   | Quit                                                                      |
+| Key   | Does                                                                     |
+| ----- | ------------------------------------------------------------------------ |
+| `p`   | Pause the log. Nothing is lost while paused                              |
+| `f`   | Cycle the minimum severity shown: `info+` → `warn+` → `error` → `debug+` |
+| `/`   | Filter the log by text. Enter applies it                                 |
+| `b`   | Show or hide the CAN bus pane                                            |
+| `esc` | Close the help panel, or clear the text filter                           |
+| `c`   | Copy every visible line to your clipboard                                |
+| `s`   | Save every visible line to a file under `~/.ros/viator-tui`              |
+| `?`   | Show the help panel                                                      |
+| `q`   | Quit                                                                     |
 
 `c` and `s` both act on what is currently visible, so set your level and text filter first and you get exactly the lines you wanted rather than the whole buffer.
 
@@ -120,16 +155,18 @@ The order that gets you to an answer fastest:
         points straight at that module. Everything `stale` at once means the whole graph went down,
         not that eight things broke.
     </Step>
-    <Step>
-        **Press `p`** so the log stops moving.
-    </Step>
+    <Step>**Press `p`** so the log stops moving.</Step>
     <Step>
         **Press `f` twice** to get to `warn+`. On a rover that is misbehaving the interesting lines
         are warnings and errors, and at `info+` they scroll past surrounded by routine chatter.
     </Step>
     <Step>
-        **Press `/` and filter by the module name** from the table. Now you are looking at only
-        what that module said.
+        **Press `/` and filter by the module name** from the table. Now you are looking at only what
+        that module said.
+    </Step>
+    <Step>
+        **Glance at the bus pane** if the module in question touches CAN. Frames moving means the
+        problem is above the wire; a silent bus means it is the wire.
     </Step>
     <Step>
         **Press `s`** to keep it. A failed run is worth a file; you will want it again in twenty
@@ -171,12 +208,23 @@ Press `?` and the help panel names the file in use for the current session.
         the driver; concentrated on one motor points at that motor's wiring.
     </Accordion>
     <Accordion title="The log is frozen and p doesn't help">
-        Check the log pane's border for the word `PAUSED`. If it isn't there, the log genuinely has
-        nothing new, which is normal - modules only log on a change of state.
+        Check the right-hand end of the log pane's border for the word `paused`. If it isn't there,
+        the log genuinely has nothing new, which is normal - modules only log on a change of state.
+    </Accordion>
+    <Accordion title="The bus pane is empty but can_rmdx8 says ok">
+        `can_rmdx8` reports on its own polling, so it can look healthy while nothing reaches the
+        transceiver. An empty pane with `0/s` on the border is the bus itself: check the
+        transceiver, the wiring, and that both ends are terminated at 120Ω. If the border says
+        `candump not installed` instead, you are not in the dev container.
+    </Accordion>
+    <Accordion title="The dashboard has a solid background in my terminal">
+        It asks for your terminal's default background rather than painting one, so a solid backdrop
+        is your terminal's own opacity setting, not the dashboard's. The colours come from your
+        sixteen-colour palette for the same reason.
     </Accordion>
     <Accordion title="The terminal is left in a mess after a crash">
-        The dashboard runs in the alternate screen with echo off, so a hard kill can leave the
-        shell invisible. `make launch` restores it on the way out, but if you killed it some other
-        way, `reset` fixes it.
+        The dashboard runs in the alternate screen with echo off, so a hard kill can leave the shell
+        invisible. `make launch` restores it on the way out, but if you killed it some other way,
+        `reset` fixes it.
     </Accordion>
 </Accordions>

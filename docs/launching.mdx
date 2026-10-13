@@ -20,20 +20,40 @@ Five phases, each reporting before it runs anything, so a failure tells you whic
 ```text
   viator  bringing the rover up
 
-  [1/5] host
-  [ ok ] docker                 28.3.1
-  [ ok ] compose                v2.33.0
-  [ ok ] workspace              /home/trickfire/viator (main @ a1b2c3d)
-  [2/5] can bus
-  [ ok ] can0                   up at 1000000 bit/s
-  [3/5] container
-  [ ok ] image viator:dev       done
-  [ ok ] container viator       done
-  [4/5] workspace
-  [ ok ] colcon build           12 packages
-  [5/5] rover
-  [ ok ] node graph             running as pid 487
+  host
+  ✓ platform               Jetson AGX Orin
+  ✓ docker                 28.3.1
+  ✓ compose                v2.33.0
+  ✓ workspace              main @ a1b2c3d  /home/trickfire/viator
+
+  can bus
+  ✓ can0                   already up at 1000000 bit/s
+
+  container
+  ✓ image viator:dev       done in 3s
+  ✓ container viator       done in 1s
+
+  workspace
+  ✓ colcon build           12 packages in 48s
+
+  rover
+  ✓ node graph             running as pid 487
 ```
+
+The two slow phases, the image build and `colcon build`, are not silent while they run. Each one opens a six-line pane underneath its status line showing the tail of its own output, so you can watch a build move instead of staring at a spinner:
+
+```text
+  container
+  ⠹ image viator:dev       12s
+    │ #14 [ 7/19] RUN apt-get install -y --no-install-recommends can-utils
+    │ #14 11.84 Preparing to unpack .../can-utils_2021.08.0-1_arm64.deb ...
+    │ #14 11.92 Unpacking can-utils (2021.08.0-1) ...
+    │ #14 12.07 Setting up can-utils (2021.08.0-1) ...
+    │ #14 12.19 Processing triggers for man-db (2.10.2-1) ...
+    │ #14 DONE 12.3s
+```
+
+When the step finishes the pane disappears and leaves the one line of result behind, so a successful launch is still twelve lines total. When it fails the pane stays, and the last twenty-five lines of output plus the path to the full log stay with it.
 
 | Phase       | Does                                                                            |
 | ----------- | ------------------------------------------------------------------------------- |
@@ -47,15 +67,16 @@ Then it hands you the dashboard. Press `?` in there for the keys, `q` to quit.
 
 <Callout type="info" title="It works from either side">
     Run it on the rover's host and it does all five phases. Run it inside the dev container, where
-    the first four are already done, and it goes straight to the node graph and the dashboard.
-    There is nothing to remember about which terminal you are in.
+    the first four are already done, and it goes straight to the node graph and the dashboard. There
+    is nothing to remember about which terminal you are in.
 </Callout>
 
 <Callout type="warning" title="Quitting the dashboard stops the rover">
     `make launch` owns the node graph it started, so `q` shuts it down, and so does losing your SSH
     session. That is the right behaviour on a bench, where a dropped connection should stop the
     motors rather than leave them holding a setpoint. To run the rover independently of your
-    terminal, use `make graph` and `make tui` as [two separate commands](#running-it-without-the-dashboard).
+    terminal, use `make graph` and `make tui` as [two separate
+    commands](#running-it-without-the-dashboard).
 </Callout>
 
 ## Make CAN bringup automatic
@@ -129,17 +150,17 @@ make            # list every target
 `make launch` leaves you in the dashboard, where every module should reach `ok` within a few seconds:
 
 ```text
-╭─ modules  8 reporting ───────────────────────────────────────────────╮
-│  module                   state     detail                          │
-│  arm                      ok        mode disabled                   │
-│  camera                   ok        2 cameras: [0, 1]               │
-│  can_rmdx8                ok        6 motors on can0                │
-│  drivebase                ok        awaiting commands               │
-│  heartbeat                ok        awaiting mission control        │
-│  mission_control_updater  ok                                        │
-│  rosapi                   ok        discovered                      │
-│  rosbridge                ok        discovered                      │
-╰──────────────────────────────────────────────────────────────────────╯
+╭─ modules ────────────────────────────────────────────────────────────╮
+│  module                     state     detail                        │
+│  ● arm                      ok        mode disabled                 │
+│  ● camera                   ok        2 cameras: [0, 1]             │
+│  ● can_rmdx8                ok        6 motors on can0              │
+│  ● drivebase                ok        awaiting commands             │
+│  ● heartbeat                ok        awaiting mission control      │
+│  ● mission_control_updater  ok                                      │
+│  ● rosapi                   ok        discovered                    │
+│  ● rosbridge                ok        discovered                    │
+╰──────────────────────────────────────────────────── 8/8 ok ─────────╯
 ```
 
 For the same answer without opening anything, from a second terminal:
@@ -151,13 +172,13 @@ make status
 ```text
   viator  preflight
 
-  [ ok ] image                  viator:dev
-  [ ok ] container              viator running
-  [ ok ] can0                   up at 1000000 bit/s
-  [ ok ] motors                 all 6 responding
-  [ ok ] cameras                2 video device(s): /dev/video0 /dev/video1
-  [ ok ] rosbridge              listening on 9090
-  [ ok ] disk                   42103 MB free on /home/trickfire/viator
+  ✓ image                  viator:dev
+  ✓ container              viator running
+  ✓ can0                   up at 1000000 bit/s
+  ✓ motors                 all 6 responding
+  ✓ cameras                2 video device(s): /dev/video0 /dev/video1
+  ✓ rosbridge              listening on 9090
+  ✓ disk                   42103 MB free on /home/trickfire/viator
 
   ready - 7 checks passed
 ```
@@ -221,6 +242,7 @@ Use this when you want the rover to outlive the terminal you are watching it fro
 
         This one only observes, so closing it or losing the connection leaves the rover running.
     </Step>
+
 </Steps>
 
 `make graph` doesn't check CAN or build anything - it assumes `make launch` already did. If the bus isn't up, `make can-setup` brings it up on its own.
@@ -247,9 +269,9 @@ candump any
         `mttcan` driver. On a laptop this is expected - the rover needs real hardware to run.
     </Accordion>
     <Accordion title="The node graph shut itself down during startup">
-        A node that commands motors failed, and the launch file takes the whole graph down when
-        that happens so the motors stop rather than holding their last setpoint. `make launch`
-        prints the first error it finds; the full output is in `log/launch-latest.log`.
+        A node that commands motors failed, and the launch file takes the whole graph down when that
+        happens so the motors stop rather than holding their last setpoint. `make launch` prints the
+        first error it finds; the full output is in `log/launch-latest.log`.
     </Accordion>
     <Accordion title="The build failed and I can't see why">
         Re-run with `make launch FLAGS=-v` to stream the build instead of collapsing it. On a

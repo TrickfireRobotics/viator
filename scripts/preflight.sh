@@ -112,11 +112,9 @@ fi
 
 echo
 if [ "$FAIL_COUNT" -eq 0 ]; then
-    echo "$(green "ready") - ${PASS_COUNT} checks passed"
-    echo
+    printf '  %s %s\n\n' "$(green 'ready')" "$(dim "${PASS_COUNT} checks passed")"
     exit 0
 fi
 
-echo "$(red "NOT ready") - ${FAIL_COUNT} failed, ${PASS_COUNT} passed"
-echo
+printf '  %s %s\n\n' "$(red 'NOT ready')" "$(dim "${FAIL_COUNT} failed, ${PASS_COUNT} passed")"
 exit 1

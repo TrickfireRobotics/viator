@@ -23,8 +23,15 @@ from rcl_interfaces.msg import Log
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
-from tui.app import ViatorTui
-from tui.bridge import LaunchLogTail, LogRecord, StatusRecord, parseLaunchLine
+from tui.app import ViatorTui, shortNodeName
+from tui.bridge import (
+    CanFrame,
+    CanTail,
+    LaunchLogTail,
+    LogRecord,
+    StatusRecord,
+    parseLaunchLine,
+)
 
 LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
 
@@ -106,13 +113,84 @@ def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
     ]
 
 
+def test_launch_plumbing_is_demoted_to_debug():
+    """
+    The dozen identical bookkeeping lines at the top of every run are hidden by default,
+    but still there for anyone who cycles the level down to debug.
+    """
+    pid = parseLaunchLine("[INFO] [drivebase-1]: process started with pid [896]\n")
+    real = parseLaunchLine("[INFO] [drivebase]: awaiting commands\n")
+
+    assert pid.level == Log.DEBUG
+    assert real.level == Log.INFO
+
+
+def test_can_frames_parse_out_of_candump_output():
+    frames: list[CanFrame] = []
+    tail = CanTail("can0", frames.append, lambda _state: None)
+
+    class FakeProcess:
+        stdout = iter(
+            [
+                "  can0  155   [8]  00 01 A0 3F 00 00 00 12\n",
+                "  can0  15a   [4]  92 00 00 00\n",
+                "not a frame\n",
+            ]
+        )
+
+    tail._readFrames(FakeProcess())
+
+    assert [(f.can_id, f.dlc, f.data) for f in frames] == [
+        ("155", 8, "00 01 A0 3F 00 00 00 12"),
+        ("15A", 4, "92 00 00 00"),
+    ]
+
+
+def test_node_names_lose_their_ros_decoration():
+    assert shortNodeName("/can_rmdx8_node") == "can_rmdx8"
+    assert shortNodeName("camera") == "camera"
+    assert len(shortNodeName("a_very_long_node_name_indeed")) <= 16
+
+
 @asyncTest
 async def test_panes_mount():
     app = ViatorTui()
     async with app.run_test():
         assert len(app.query_one("#status", DataTable).columns) == 3
         assert app.query_one("#log", RichLog) is not None
+        assert app.query_one("#bus", RichLog) is not None
         assert app.query_one("#search", Input) is not None
+
+
+@asyncTest
+async def test_nothing_paints_a_background_over_the_terminal():
+    """
+    The dashboard is meant to sit in the operator's terminal, not on top of it, so a
+    widget that paints an opaque surface is a regression.
+    """
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        opaque = [
+            widget
+            for widget in app.query("Header, Footer, DataTable, RichLog, Input, Vertical")
+            if widget.styles.background.a == 1
+        ]
+        assert opaque == []
+
+
+@asyncTest
+async def test_bus_pane_shows_frames_and_can_be_hidden():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._bus_pending.append(CanFrame("can0", "155", 8, "00 01 A0 3F 00 00 00 12"))
+        app._drainBus()
+        await pilot.pause()
+        assert app._bus_ids == {"155"}
+
+        await pilot.press("b")
+        await pilot.pause()
+        assert app.query_one("#bus-pane").has_class("hidden")
 
 
 @asyncTest

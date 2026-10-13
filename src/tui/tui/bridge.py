@@ -10,7 +10,10 @@ executor is spun on its own thread and results are handed over through plain cal
 The app wraps those in `call_from_thread` before touching any widget.
 """
 
+import os
 import re
+import shutil
+import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -29,10 +32,24 @@ from lib.status import STATUS_TOPIC
 
 ROSOUT_TOPIC = "/rosout"
 
+# The bus the rover is wired to. Set by the scripts, which are the only thing that knows.
+CAN_IFACE = os.environ.get("CAN_IFACE", "can0")
+
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 _LAUNCH_LINE = re.compile(r"^\[(DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL)\]\s+\[([^]]+)\]:\s?(.*)$")
 _NATIVE_WARNING = re.compile(r"^\[\s*WARN(?::\d+)?\]")
 _ERROR_TEXT = re.compile(r"^(Traceback|[A-Za-z_][\w.]*Error:|[A-Za-z_][\w.]*Exception:)")
+
+# Launch's own bookkeeping. True, and worth having, but it is the same dozen lines at the
+# top of every single run and it buries the lines that differ between runs. Demoted to
+# debug rather than dropped, so `f` still gets you to it.
+_LAUNCH_PLUMBING = re.compile(
+    r"^(All log files can be found below|Default logging verbosity is set to"
+    r"|process started with pid|process has finished cleanly)"
+)
+
+# One candump line: `  can0  155   [8]  00 01 02 03 04 05 06 07`.
+_CAN_FRAME = re.compile(r"^\s*(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*(.*)$")
 
 LEVEL_NAMES = {
     Log.DEBUG: "DEBUG",
@@ -62,6 +79,18 @@ class LogRecord:
         The timestamp as local `HH:MM:SS`, which is all that fits and all anyone reads.
         """
         return datetime.fromtimestamp(self.seconds).strftime("%H:%M:%S")
+
+
+@dataclass(frozen=True)
+class CanFrame:
+    """
+    One frame off the bus, as candump printed it.
+    """
+
+    iface: str
+    can_id: str
+    dlc: int
+    data: str
 
 
 @dataclass(frozen=True)
@@ -96,6 +125,8 @@ def parseLaunchLine(line: str) -> LogRecord:
     level_name, node, message = match.groups()
     level_name = "WARN" if level_name == "WARNING" else level_name
     level = getattr(Log, level_name)
+    if level == Log.INFO and _LAUNCH_PLUMBING.match(message):
+        return LogRecord(Log.DEBUG, "DEBUG", node, message, seconds, 0)
     return LogRecord(level, level_name, node, message, seconds, 0)
 
 
@@ -137,6 +168,90 @@ class LaunchLogTail:
                             break
             except FileNotFoundError:
                 self._stop.wait(0.1)
+
+
+class CanTail:
+    """
+    Follows `candump` on one interface for the bus pane.
+
+    The status topic says a module thinks the bus is healthy; this says whether anything
+    is actually on the wire, which is the question you have when a motor isn't moving and
+    every module still reports ok. Runs candump rather than opening a socket so it needs
+    no privileges the dashboard doesn't already have.
+    """
+
+    # candump exits if the interface goes away. Come back rather than leaving a dead pane.
+    RETRY_SEC = 2.0
+
+    def __init__(
+        self,
+        iface: str,
+        on_frame: Callable[[CanFrame], None],
+        on_state: Callable[[str], None],
+    ) -> None:
+        self._iface = iface
+        self._on_frame = on_frame
+        self._on_state = on_state
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._process: subprocess.Popen[str] | None = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, name="can-tail", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._process is not None:
+            self._process.terminate()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def _command(self) -> list[str]:
+        # candump block-buffers when its stdout is a pipe, which turns a live feed into
+        # output that arrives 4KB at a time.
+        command = ["candump", self._iface]
+        if shutil.which("stdbuf"):
+            return ["stdbuf", "-oL", *command]
+        return command
+
+    def _run(self) -> None:
+        if not shutil.which("candump"):
+            self._on_state("candump not installed")
+            return
+
+        while not self._stop.is_set():
+            try:
+                self._process = subprocess.Popen(
+                    self._command(),
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    bufsize=1,
+                )
+            except OSError as error:
+                self._on_state(str(error))
+                self._stop.wait(self.RETRY_SEC)
+                continue
+
+            self._on_state("")
+            self._readFrames(self._process)
+
+            if self._stop.is_set():
+                return
+            self._on_state(f"{self._iface} is not up")
+            self._stop.wait(self.RETRY_SEC)
+
+    def _readFrames(self, process: "subprocess.Popen[str]") -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            if self._stop.is_set():
+                return
+            match = _CAN_FRAME.match(line.rstrip())
+            if match is not None:
+                iface, can_id, dlc, data = match.groups()
+                self._on_frame(CanFrame(iface, can_id.upper(), int(dlc), data.strip()))
 
 
 class ObserverNode(Node):
@@ -190,6 +305,8 @@ class RosBridge:
         self,
         on_status: Callable[[StatusRecord], None],
         on_log: Callable[[LogRecord], None],
+        on_frame: Callable[[CanFrame], None],
+        on_bus_state: Callable[[str], None],
         launch_log: Path | None = None,
     ) -> None:
         self._on_status = on_status
@@ -198,6 +315,7 @@ class RosBridge:
         self._node: ObserverNode | None = None
         self._thread: threading.Thread | None = None
         self._launch_tail = LaunchLogTail(launch_log, on_log) if launch_log else None
+        self._can_tail = CanTail(CAN_IFACE, on_frame, on_bus_state)
 
     def start(self) -> None:
         """
@@ -212,6 +330,7 @@ class RosBridge:
         self._thread.start()
         if self._launch_tail is not None:
             self._launch_tail.start()
+        self._can_tail.start()
 
     def stop(self) -> None:
         """
@@ -219,6 +338,7 @@ class RosBridge:
         """
         if self._launch_tail is not None:
             self._launch_tail.stop()
+        self._can_tail.stop()
         if self._executor is not None:
             self._executor.shutdown()
         if self._node is not None:
