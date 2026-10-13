@@ -5,6 +5,9 @@
 # than assuming what state it was left in. Configures the interface and enables the
 # controllers only; it does not command any motion.
 #
+# Fails loudly if nothing actually made it onto the wire, which is what a dead transceiver
+# or miswired bus looks like - the ip commands all succeed and candump just stays empty.
+#
 # Called by `make can-setup`, by `make launch` when the bus isn't up yet, and by
 # viator-can.service at boot on a deployed rover.
 
@@ -27,6 +30,18 @@ BITRATE=1000000
 # Motor CAN IDs (hexadecimal)
 MOTOR_IDS=("155" "156" "157" "158" "159" "15A")
 
+# The controller's own state, e.g. ERROR-ACTIVE or BUS-OFF. Anchored on berr-counter so it
+# picks the controller state and not the link's "state UP" earlier in the same output.
+canState() {
+    ip -details link show "$IFACE" 2>/dev/null |
+        grep -oP 'state \K[A-Z-]+(?= \(berr-counter)' || true
+}
+
+# Cumulative frames the interface has put on the wire since it came up.
+txPackets() {
+    ip -s link show "$IFACE" 2>/dev/null | awk '/^ *TX:/ {getline; print $2}'
+}
+
 # Ensure driver dependencies are loaded
 sudo modprobe can
 sudo modprobe can_raw
@@ -45,6 +60,9 @@ sudo ip link set "$IFACE" type can bitrate "$BITRATE"
 sudo ip link set "$IFACE" up
 echo "CAN interface ${IFACE} up at ${BITRATE} bit/s."
 
+TX_BEFORE="$(txPackets)"
+TX_BEFORE="${TX_BEFORE:-0}"
+
 # Enable motors in speed mode
 for CAN_ID in "${MOTOR_IDS[@]}"; do
     echo "Sending clear command to CAN ID 0x$CAN_ID: $CLEAR_CMD"
@@ -60,4 +78,20 @@ for CAN_ID in "${MOTOR_IDS[@]}"; do
     sleep 0.1
 done
 
+TX_AFTER="$(txPackets)"
+TX_SENT=$((${TX_AFTER:-0} - TX_BEFORE))
+STATE="$(canState)"
+
+# cansend exits 0 as soon as the frame is queued, so a bus with nothing on the other end
+# looks identical to a working one until you check what the controller actually shifted.
+if [ "$STATE" = "BUS-OFF" ] || [ "$TX_SENT" -eq 0 ]; then
+    echo "error: ${IFACE} transmitted ${TX_SENT} frames and is in state ${STATE:-UNKNOWN}." >&2
+    echo "Nothing reached the bus, so candump will show nothing." >&2
+    echo "Check transceiver power and its standby pin, 120 ohm termination, CANH/CANL" >&2
+    echo "orientation, and that the motors are powered and set to ${BITRATE} bit/s." >&2
+    echo "Details: ip -details -statistics link show ${IFACE}" >&2
+    exit 1
+fi
+
 echo "Speed setup commands sent to CAN IDs 0x${MOTOR_IDS[0]}-0x${MOTOR_IDS[-1]}."
+echo "${TX_SENT} frames confirmed transmitted on ${IFACE} (state: ${STATE})."
