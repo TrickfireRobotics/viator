@@ -2,7 +2,7 @@
 # run directly. Comments starting with `##` become the `make help` listing.
 
 .PHONY: help launch stop status tui graph build clean container connect can-setup \
-	can-service sync format hooks
+	can-service can-sudoers sync format hooks
 
 .DEFAULT_GOAL := help
 
@@ -33,6 +33,9 @@ can-service: ## make CAN bringup automatic at boot (run once per rover)
 
 can-setup: ## bring the CAN bus up right now, by hand
 	@./scripts/setup-can-network.sh
+
+can-sudoers: ## let CAN bringup run without a sudo password (run once per rover)
+	@./scripts/install-can-sudoers.sh
 
 # --- development ---
 
