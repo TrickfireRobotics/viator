@@ -19,12 +19,15 @@ pytest.importorskip("textual", reason="textual is only installed in the dev cont
 pytest.importorskip("rcl_interfaces", reason="needs a sourced ROS 2 environment")
 pytest.importorskip("custom_interfaces", reason="needs the workspace to be built")
 
-from rcl_interfaces.msg import Log
 from textual.widgets import DataTable, Input, RichLog, Static
 
 from custom_interfaces.msg import NodeStatus
 from tui.app import ViatorTui, shortNodeName
 from tui.bridge import (
+    LEVEL_DEBUG,
+    LEVEL_ERROR,
+    LEVEL_INFO,
+    LEVEL_WARN,
     CanFrame,
     CanTail,
     LaunchLogTail,
@@ -33,7 +36,7 @@ from tui.bridge import (
     parseLaunchLine,
 )
 
-LEVEL_NAMES = {Log.DEBUG: "DEBUG", Log.INFO: "INFO", Log.WARN: "WARN", Log.ERROR: "ERROR"}
+LEVEL_NAMES = {LEVEL_DEBUG: "DEBUG", LEVEL_INFO: "INFO", LEVEL_WARN: "WARN", LEVEL_ERROR: "ERROR"}
 
 
 def asyncTest(fn: Callable[..., Coroutine[Any, Any, None]]) -> Callable[..., None]:
@@ -80,13 +83,13 @@ def test_launch_lines_include_tracebacks_and_ros_levels():
     traceback = parseLaunchLine("Traceback (most recent call last):\n")
     warning = parseLaunchLine("[ WARN:0] OpenCV warning\n")
 
-    assert (error.level, error.node, error.message) == (Log.ERROR, "can_rmdx8", "bus down")
+    assert (error.level, error.node, error.message) == (LEVEL_ERROR, "can_rmdx8", "bus down")
     assert (traceback.level, traceback.node, traceback.message) == (
-        Log.ERROR,
+        LEVEL_ERROR,
         "launch",
         "Traceback (most recent call last):",
     )
-    assert (warning.level, warning.level_name) == (Log.WARN, "WARN")
+    assert (warning.level, warning.level_name) == (LEVEL_WARN, "WARN")
 
 
 def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
@@ -108,8 +111,8 @@ def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
     assert received.wait(timeout=1.0)
     tail.stop()
     assert [(record.level, record.message) for record in records] == [
-        (Log.INFO, "starting"),
-        (Log.ERROR, "stopped"),
+        (LEVEL_INFO, "starting"),
+        (LEVEL_ERROR, "stopped"),
     ]
 
 
@@ -121,8 +124,8 @@ def test_launch_plumbing_is_demoted_to_debug():
     pid = parseLaunchLine("[INFO] [drivebase-1]: process started with pid [896]\n")
     real = parseLaunchLine("[INFO] [drivebase]: awaiting commands\n")
 
-    assert pid.level == Log.DEBUG
-    assert real.level == Log.INFO
+    assert pid.level == LEVEL_DEBUG
+    assert real.level == LEVEL_INFO
 
 
 def test_can_frames_parse_out_of_candump_output():
@@ -207,13 +210,13 @@ async def test_status_rows_appear():
 async def test_default_filter_hides_debug():
     app = ViatorTui()
     async with app.run_test() as pilot:
-        app._applyLog(makeLog(Log.INFO, "drivebase", "driving"))
-        app._applyLog(makeLog(Log.DEBUG, "camera", "created publisher"))
-        app._applyLog(makeLog(Log.ERROR, "can_rmdx8", "bus down"))
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving"))
+        app._applyLog(makeLog(LEVEL_DEBUG, "camera", "created publisher"))
+        app._applyLog(makeLog(LEVEL_ERROR, "can_rmdx8", "bus down"))
         await pilot.pause()
 
         shown = [r.level for r in app._records if app._shouldShow(r)]
-        assert shown == [Log.INFO, Log.ERROR]
+        assert shown == [LEVEL_INFO, LEVEL_ERROR]
 
 
 @asyncTest
@@ -272,8 +275,8 @@ async def test_help_opens_and_escape_closes_it():
 async def test_text_filter_narrows_log():
     app = ViatorTui()
     async with app.run_test() as pilot:
-        app._applyLog(makeLog(Log.INFO, "drivebase", "driving forward"))
-        app._applyLog(makeLog(Log.INFO, "camera", "publishing video0"))
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(LEVEL_INFO, "camera", "publishing video0"))
         await pilot.pause()
 
         app._search = "video"
@@ -292,8 +295,8 @@ async def test_save_writes_only_visible_lines(tmp_path, monkeypatch):
 
     app = ViatorTui()
     async with app.run_test() as pilot:
-        app._applyLog(makeLog(Log.INFO, "drivebase", "driving forward"))
-        app._applyLog(makeLog(Log.DEBUG, "camera", "created publisher"))
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(LEVEL_DEBUG, "camera", "created publisher"))
         await pilot.pause()
 
         await pilot.press("s")

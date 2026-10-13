@@ -19,7 +19,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import ClassVar
 
-from rcl_interfaces.msg import Log
 from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -30,34 +29,45 @@ from textual.widgets import DataTable, Footer, Header, Input, RichLog, Static
 from custom_interfaces.msg import NodeStatus
 from lib.status import STATE_NAMES
 
-from .bridge import CAN_IFACE, CanFrame, LogRecord, RosBridge, StatusRecord
+from .bridge import (
+    CAN_IFACE,
+    LEVEL_DEBUG,
+    LEVEL_ERROR,
+    LEVEL_FATAL,
+    LEVEL_INFO,
+    LEVEL_WARN,
+    CanFrame,
+    LogRecord,
+    RosBridge,
+    StatusRecord,
+)
 
 # Levels the `f` key cycles through, as a minimum threshold.
-LEVEL_CYCLE = [Log.DEBUG, Log.INFO, Log.WARN, Log.ERROR]
+LEVEL_CYCLE = [LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARN, LEVEL_ERROR]
 
 LEVEL_LABELS = {
-    Log.DEBUG: "debug+",
-    Log.INFO: "info+",
-    Log.WARN: "warn+",
-    Log.ERROR: "error",
+    LEVEL_DEBUG: "debug+",
+    LEVEL_INFO: "info+",
+    LEVEL_WARN: "warn+",
+    LEVEL_ERROR: "error",
 }
 
 # The level marker is a gutter rather than a word: `INFO` down the left of four hundred
 # lines is four hundred repetitions of the least interesting thing on each one. A bar
 # that only changes colour when something is wrong reads at a glance and costs no width.
 LEVEL_GUTTER = {
-    Log.DEBUG: ("┊", "dim"),
-    Log.INFO: ("│", "dim"),
-    Log.WARN: ("┃", "yellow"),
-    Log.ERROR: ("┃", "bold red"),
-    Log.FATAL: ("┃", "bold white on red"),
+    LEVEL_DEBUG: ("┊", "dim"),
+    LEVEL_INFO: ("│", "dim"),
+    LEVEL_WARN: ("┃", "yellow"),
+    LEVEL_ERROR: ("┃", "bold red"),
+    LEVEL_FATAL: ("┃", "bold white on red"),
 }
 
 MESSAGE_STYLES = {
-    Log.DEBUG: "dim",
-    Log.WARN: "yellow",
-    Log.ERROR: "red",
-    Log.FATAL: "bold red",
+    LEVEL_DEBUG: "dim",
+    LEVEL_WARN: "yellow",
+    LEVEL_ERROR: "red",
+    LEVEL_FATAL: "bold red",
 }
 
 STATE_STYLES = {
@@ -315,7 +325,7 @@ class ViatorTui(App[None]):
         self._bus_state = "waiting"
 
         self._paused = False
-        self._level_index = LEVEL_CYCLE.index(Log.INFO)
+        self._level_index = LEVEL_CYCLE.index(LEVEL_INFO)
         self._search = ""
 
         self._bridge = RosBridge(

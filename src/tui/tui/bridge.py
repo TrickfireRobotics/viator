@@ -51,12 +51,28 @@ _LAUNCH_PLUMBING = re.compile(
 # One candump line: `  can0  155   [8]  00 01 02 03 04 05 06 07`.
 _CAN_FRAME = re.compile(r"^\s*(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*(.*)$")
 
+
+def _asLevel(value: int | bytes) -> int:
+    """
+    rosidl generates Log's level constants (Log.DEBUG etc) as single-byte `bytes`
+    objects, but a received message's `level` field deserializes as a plain `int`.
+    Everything in the dashboard compares levels as `int`, so constants go through here.
+    """
+    return value[0] if isinstance(value, bytes) else value
+
+
+LEVEL_DEBUG = _asLevel(Log.DEBUG)
+LEVEL_INFO = _asLevel(Log.INFO)
+LEVEL_WARN = _asLevel(Log.WARN)
+LEVEL_ERROR = _asLevel(Log.ERROR)
+LEVEL_FATAL = _asLevel(Log.FATAL)
+
 LEVEL_NAMES = {
-    Log.DEBUG: "DEBUG",
-    Log.INFO: "INFO",
-    Log.WARN: "WARN",
-    Log.ERROR: "ERROR",
-    Log.FATAL: "FATAL",
+    LEVEL_DEBUG: "DEBUG",
+    LEVEL_INFO: "INFO",
+    LEVEL_WARN: "WARN",
+    LEVEL_ERROR: "ERROR",
+    LEVEL_FATAL: "FATAL",
 }
 
 
@@ -117,16 +133,16 @@ def parseLaunchLine(line: str) -> LogRecord:
     seconds = int(time.time())
     if match is None:
         if _ERROR_TEXT.match(text):
-            return LogRecord(Log.ERROR, "ERROR", "launch", text, seconds, 0)
+            return LogRecord(LEVEL_ERROR, "ERROR", "launch", text, seconds, 0)
         if _NATIVE_WARNING.match(text):
-            return LogRecord(Log.WARN, "WARN", "launch", text, seconds, 0)
-        return LogRecord(Log.INFO, "INFO", "launch", text, seconds, 0)
+            return LogRecord(LEVEL_WARN, "WARN", "launch", text, seconds, 0)
+        return LogRecord(LEVEL_INFO, "INFO", "launch", text, seconds, 0)
 
     level_name, node, message = match.groups()
     level_name = "WARN" if level_name == "WARNING" else level_name
-    level = getattr(Log, level_name)
-    if level == Log.INFO and _LAUNCH_PLUMBING.match(message):
-        return LogRecord(Log.DEBUG, "DEBUG", node, message, seconds, 0)
+    level = _asLevel(getattr(Log, level_name))
+    if level == LEVEL_INFO and _LAUNCH_PLUMBING.match(message):
+        return LogRecord(LEVEL_DEBUG, "DEBUG", node, message, seconds, 0)
     return LogRecord(level, level_name, node, message, seconds, 0)
 
 
@@ -284,10 +300,11 @@ class ObserverNode(Node):
         self._on_status(StatusRecord(name=msg.name, state=msg.state, detail=msg.detail))
 
     def _logCallback(self, msg: Log) -> None:
+        level = _asLevel(msg.level)
         self._on_log(
             LogRecord(
-                level=msg.level,
-                level_name=LEVEL_NAMES.get(msg.level, str(msg.level)),
+                level=level,
+                level_name=LEVEL_NAMES.get(level, str(level)),
                 node=msg.name,
                 message=msg.msg,
                 seconds=msg.stamp.sec,
