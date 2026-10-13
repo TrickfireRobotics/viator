@@ -13,6 +13,7 @@ operator's terminal, so it borrows their colours rather than painting over them.
 import base64
 import os
 import sys
+import threading
 import time
 from collections import deque
 from datetime import datetime
@@ -97,10 +98,10 @@ BUFFER_SIZE = 5000
 # The bus pane is a window on live traffic, not a record of it, so it keeps far less.
 BUS_BUFFER_SIZE = 500
 
-# Frames arrive faster than a terminal can usefully redraw, so they are batched onto the
-# UI thread on a timer instead of one call per frame.
-BUS_DRAIN_PERIOD_SEC = 0.1
-BUS_DRAIN_LIMIT = 24
+# Frames arrive faster than a terminal can usefully redraw, so the pane is refreshed with
+# the latest frame for each ID a few times per second instead of drawing a backlog.
+BUS_DRAIN_PERIOD_SEC = 0.25
+BUS_DISPLAY_LIMIT = 12
 
 # Matches the supervisor: a module republishes every second, so three misses means gone.
 STALE_AFTER_SEC = 3.0
@@ -319,6 +320,8 @@ class ViatorTui(App[None]):
         self._status_seen: dict[str, float] = {}
 
         self._bus_pending: deque[CanFrame] = deque(maxlen=BUS_BUFFER_SIZE)
+        self._bus_pending_lock = threading.Lock()
+        self._bus_received = 0
         self._bus_ids: set[str] = set()
         self._bus_count = 0
         self._bus_rate = 0
@@ -332,7 +335,7 @@ class ViatorTui(App[None]):
             on_status=self._handleStatus,
             on_log=self._handleLog,
             launch_log=Path(LAUNCH_LOG_HINT),
-            on_frame=self._bus_pending.append,
+            on_frame=self._handleFrame,
             on_bus_state=self._handleBusState,
         )
 
@@ -354,7 +357,14 @@ class ViatorTui(App[None]):
 
             with Vertical(id="bus-pane") as bus_pane:
                 bus_pane.border_title = CAN_IFACE
-                yield RichLog(id="bus", wrap=False, highlight=False, auto_scroll=True, min_width=0)
+                yield RichLog(
+                    id="bus",
+                    wrap=False,
+                    highlight=False,
+                    auto_scroll=True,
+                    min_width=0,
+                    max_lines=BUS_BUFFER_SIZE,
+                )
 
         help_panel = Static(HELP_TEXT, id="help", markup=True)
         help_panel.border_title = "how to read this"
@@ -392,6 +402,11 @@ class ViatorTui(App[None]):
     def _handleBusState(self, state: str) -> None:
         self._bus_state = state
 
+    def _handleFrame(self, frame: CanFrame) -> None:
+        with self._bus_pending_lock:
+            self._bus_pending.append(frame)
+            self._bus_received += 1
+
     def _applyStatus(self, record: StatusRecord) -> None:
         self._status[record.name] = record
         self._status_seen[record.name] = time.monotonic()
@@ -413,20 +428,31 @@ class ViatorTui(App[None]):
 
     def _drainBus(self) -> None:
         """
-        Moves a batch of frames into the bus pane and recomputes the rate.
+        Refreshes the bus pane with the latest frame for each CAN ID.
 
-        The bus runs at thousands of frames a second when the drivebase is moving. Drawing
-        every one of them would spend the whole frame budget on text nobody can read at
-        that speed, so this takes a slice and reports the rate for the rest.
+        The bus runs at thousands of frames a second when the drivebase is moving. Keep
+        the display current without rendering an ever-growing backlog, while counting
+        every received frame for the rate shown in the pane title.
         """
+        with self._bus_pending_lock:
+            frames = list(self._bus_pending)
+            self._bus_pending.clear()
+            received = self._bus_received
+            self._bus_received = 0
+
+        if not frames:
+            return
+
         pane = self.query_one("#bus", RichLog)
-        drained = 0
-        while self._bus_pending and drained < BUS_DRAIN_LIMIT:
-            frame = self._bus_pending.popleft()
+        latest_by_id: dict[str, CanFrame] = {}
+        for frame in frames:
             self._bus_ids.add(frame.can_id)
-            self._bus_count += 1
-            drained += 1
-            if not self._paused:
+            latest_by_id.pop(frame.can_id, None)
+            latest_by_id[frame.can_id] = frame
+
+        self._bus_count += received or len(frames)
+        if not self._paused:
+            for frame in list(latest_by_id.values())[-BUS_DISPLAY_LIMIT:]:
                 pane.write(self._renderFrame(frame))
 
     # ***************

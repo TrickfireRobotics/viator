@@ -186,7 +186,7 @@ async def test_nothing_paints_a_background_over_the_terminal():
 async def test_bus_pane_shows_frames_and_can_be_hidden():
     app = ViatorTui()
     async with app.run_test() as pilot:
-        app._bus_pending.append(CanFrame("can0", "155", 8, "00 01 A0 3F 00 00 00 12"))
+        app._handleFrame(CanFrame("can0", "155", 8, "00 01 A0 3F 00 00 00 12"))
         app._drainBus()
         await pilot.pause()
         assert app._bus_ids == {"155"}
@@ -194,6 +194,24 @@ async def test_bus_pane_shows_frames_and_can_be_hidden():
         await pilot.press("b")
         await pilot.pause()
         assert app.query_one("#bus-pane").has_class("hidden")
+
+
+@asyncTest
+async def test_bus_pane_coalesces_frames_but_counts_every_frame(monkeypatch):
+    app = ViatorTui()
+    async with app.run_test():
+        writes = []
+        pane = app.query_one("#bus", RichLog)
+        monkeypatch.setattr(pane, "write", writes.append)
+
+        app._handleFrame(CanFrame("can0", "155", 8, "old"))
+        app._handleFrame(CanFrame("can0", "15A", 8, "other"))
+        app._handleFrame(CanFrame("can0", "155", 8, "new"))
+        app._drainBus()
+
+        assert app._bus_count == 3
+        assert app._bus_ids == {"155", "15A"}
+        assert [str(frame) for frame in writes] == ["15A 8 other", "155 8 new"]
 
 
 @asyncTest

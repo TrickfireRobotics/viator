@@ -70,17 +70,7 @@ cleanup() {
 
     if [ "$owns_graph" = true ] && [ -n "$graph_pid" ] && kill -0 "$graph_pid" 2>/dev/null; then
         section "stopping"
-        # SIGINT rather than SIGTERM: launch treats it as a shutdown request and runs the
-        # nodes' own handlers, which is what stops the motors.
-        kill -INT "$graph_pid" 2>/dev/null || true
-        for _ in $(seq 1 100); do
-            kill -0 "$graph_pid" 2>/dev/null || break
-            sleep 0.1
-        done
-        if kill -0 "$graph_pid" 2>/dev/null; then
-            warn "node graph" "did not stop in 10s, killing it"
-            kill -KILL "$graph_pid" 2>/dev/null || true
-        fi
+        kill -KILL -- "-$graph_pid" 2>/dev/null || true
         ok "node graph" "stopped"
     fi
 
@@ -104,7 +94,7 @@ else
     mkdir -p "$LAUNCH_LOG_DIR"
     : >"$LAUNCH_LOG"
 
-    ros2 launch viator_launch robot.launch.py >"$LAUNCH_LOG" 2>&1 &
+    setsid ros2 launch viator_launch robot.launch.py >"$LAUNCH_LOG" 2>&1 &
     graph_pid=$!
     owns_graph=true
 
