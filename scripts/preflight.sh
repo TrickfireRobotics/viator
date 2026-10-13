@@ -32,7 +32,7 @@ else
     bad "image" "viator:dev not built, run 'make launch'"
 fi
 
-container_state="$(docker inspect -f '{{.State.Status}}' "$COMPOSE_SERVICE" 2>/dev/null | tr -d '[:space:]')"
+container_state="$(docker inspect -f '{{.State.Status}}' "$(containerId)" 2>/dev/null | tr -d '[:space:]')"
 case "${container_state:-absent}" in
 running) ok "container" "$COMPOSE_SERVICE running" ;;
 absent) warn "container" "$COMPOSE_SERVICE not created (run 'make launch')" ;;

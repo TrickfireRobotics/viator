@@ -116,7 +116,8 @@ up_args=(-d "$COMPOSE_SERVICE")
 [ "$force_recreate" = true ] && up_args=(-d --force-recreate "$COMPOSE_SERVICE")
 runStep "container $COMPOSE_SERVICE" compose up "${up_args[@]}" || die "could not start the container"
 
-containerRunning || die "the container isn't running, check 'docker logs $COMPOSE_SERVICE'"
+containerRunning ||
+    die "the container isn't running, check 'docker compose -f ${COMPOSE_FILE} logs ${COMPOSE_SERVICE}'"
 
 # ***************
 # 4. Workspace

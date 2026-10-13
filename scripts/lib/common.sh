@@ -102,8 +102,19 @@ compose() {
 }
 
 # is the rover container running?
+#
+# Asked through compose rather than `docker inspect viator`, because the two disagree.
+# Compose finds its containers by label, but the daemon renames the old one out of the
+# way (to `<id>_viator`) when it recreates a service with a fixed container_name, and if
+# the replacement never lands the renamed one keeps serving. Everything compose does
+# still works at that point; it is only the name that is gone, so don't look it up.
 containerRunning() {
-    [ "$(docker inspect -f '{{.State.Running}}' "$COMPOSE_SERVICE" 2>/dev/null)" = "true" ]
+    [ -n "$(compose ps --status running --quiet "$COMPOSE_SERVICE" 2>/dev/null)" ]
+}
+
+# The id of the service's container, running or not. Empty if it was never created.
+containerId() {
+    compose ps --all --quiet "$COMPOSE_SERVICE" 2>/dev/null | head -n 1
 }
 
 # runs a command inside the dev container as the trickfire user, non-interactively. The
