@@ -89,9 +89,6 @@ elif ! canExists; then
         note "if you meant to run without a drivebase, re-run with -s."
     fi
     die "no CAN bus to drive"
-elif canIsUp; then
-    bitrate="$(canBitrate)"
-    ok "$CAN_IFACE" "already up${bitrate:+ at ${bitrate} bit/s}"
 else
     # setup-can-network.sh needs root. Get the password prompt out of the way before the
     # status line hides stdout, or it looks like a hang.
@@ -100,7 +97,6 @@ else
         sudo -v || die "could not get sudo, run 'make can-setup' by hand"
     fi
     runStep "bringing $CAN_IFACE up" ./scripts/setup-can-network.sh || die "CAN bringup failed"
-    note "'make can-service' makes this happen at boot, so it's already up next time"
 fi
 
 # ***************
