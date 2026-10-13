@@ -86,7 +86,7 @@ class Drivebase(Node):
             return
 
         self._stopped = True
-        self.get_logger().warning(
+        self.get_logger().debug(
             colorStr(
                 f"no drive command for {COMMAND_TIMEOUT_SEC}s, zeroing drivebase",
                 ColorCodes.WARNING_YELLOW,
