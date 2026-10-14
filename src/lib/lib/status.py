@@ -1,11 +1,9 @@
 """
 Self-reported node health, published to `/viator/node_status`.
 
-`Launching <node>` used to be logged at the top of each node's `__init__`, which means it
-only ever told you a node had started constructing, not that it worked. A node could print
-it and then fail completely. This gives each node a way to say "I finished starting up and
-I'm working", and to downgrade itself later if something breaks, so the question "is the
-rover healthy" has one answer instead of being inferred from log archaeology.
+A node logging `Launching <node>` in its `__init__` only ever told you it had started
+constructing, not that it worked. This lets a node say it finished starting up, and
+downgrade itself later, so "is the rover healthy" has one answer.
 """
 
 from rclpy.node import Node
@@ -15,7 +13,7 @@ from custom_interfaces.msg import NodeStatus
 
 STATUS_TOPIC = "/viator/node_status"
 
-# Nodes republish at this rate so the supervisor can spot one that stopped reporting.
+# nodes republish at this rate, so the supervisor can spot one that stopped
 REPUBLISH_PERIOD_SEC = 1.0
 
 STATE_NAMES = {
@@ -42,33 +40,18 @@ class StatusReporter:
 
     @property
     def state(self) -> int:
-        """
-        The state most recently reported.
-        """
         return self._state
 
     def starting(self, detail: str = "") -> None:
-        """
-        Reports that the node is still bringing itself up.
-        """
         self._set(NodeStatus.STARTING, detail)
 
     def ok(self, detail: str = "") -> None:
-        """
-        Reports that the node finished starting and is working.
-        """
         self._set(NodeStatus.OK, detail)
 
     def degraded(self, detail: str = "") -> None:
-        """
-        Reports that the node is running but something is wrong.
-        """
         self._set(NodeStatus.DEGRADED, detail)
 
     def failed(self, detail: str = "") -> None:
-        """
-        Reports that the node is running but cannot do its job.
-        """
         self._set(NodeStatus.FAILED, detail)
 
     def _set(self, state: int, detail: str) -> None:

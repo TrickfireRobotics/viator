@@ -10,15 +10,14 @@ from lib.interface.robot_interface import RobotInterface
 from lib.node_runner import runNodes
 from lib.status import StatusReporter
 
-# How long a drive command stays valid. Mission control republishes continuously while a
-# stick is held, so a gap this long means the command stream stopped rather than that the
-# operator is holding still.
+# how long a drive command stays valid
+# mission control republishes while a stick is held so a gap this long means the stream stopped
 COMMAND_TIMEOUT_SEC = 0.5
 
 WATCHDOG_PERIOD_SEC = 0.1
 
-# Mission control sends a normalised stick position. Anything outside this range is a bug
-# upstream, and the drivebase shouldn't amplify it into a surprising wheel speed.
+# mission control sends a normalised stick position, and anything outside it is an
+# upstream bug the drivebase shouldn't amplify into a surprising wheel speed
 MAX_INPUT = 1.0
 
 
@@ -52,7 +51,7 @@ class Drivebase(Node):
             Float32, "move_right_drivebase_side_message", self.moveRightSide, 10
         )
 
-        # Starts already stopped so the watchdog stays quiet until the first real command
+        # starts stopped, so the watchdog stays quiet until the first real command
         self._stopped = True
         self._last_command_time = time.monotonic()
         self._watchdog = self.create_timer(WATCHDOG_PERIOD_SEC, self.checkCommandTimeout)
@@ -69,16 +68,10 @@ class Drivebase(Node):
         self._driveSide(self.RIGHT_MOTORS, -_clamp(msg.data, MAX_INPUT) * self.SPEED)
 
     def checkCommandTimeout(self) -> None:
-        """
-        Zeroes the wheels when drive commands stop arriving.
-
-        heartbeat_node already stops every motor when mission control disconnects, but that
-        only covers the websocket dropping. This covers mission control staying connected
-        while its command stream stalls, and it keeps working if heartbeat_node itself has
-        died. The motors hold a setpoint until they're given a new one, so without this the
-        rover keeps driving at whatever it was last told.
-        """
-
+        # zeroes the wheels when commands stop arriving. heartbeat_node covers mission
+        # control disconnecting; this covers it staying connected with a stalled command
+        # stream, and still works if heartbeat_node itself died. Motors hold their last
+        # setpoint, so without this the rover keeps driving
         if self._stopped:
             return
 
@@ -96,22 +89,13 @@ class Drivebase(Node):
         self._driveSide(self.RIGHT_MOTORS, 0.0)
         self._status.ok("stopped, no commands")
 
-    # ***************
-    # Private helper methods
-    # ***************
     def _noteCommand(self) -> None:
-        """
-        Records that a command arrived, so the watchdog knows the stream is alive.
-        """
         self._last_command_time = time.monotonic()
         if self._stopped:
             self._status.ok("driving")
         self._stopped = False
 
     def _driveSide(self, motors: Sequence[MotorConfig], velocity: float) -> None:
-        """
-        Runs every motor on one side of the rover at the given speed.
-        """
         for motor in motors:
             self.bot_interface.runMotorSpeed(motor, velocity)
 

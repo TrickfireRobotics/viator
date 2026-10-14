@@ -1,11 +1,5 @@
 """
-Aggregated health accounting for the RMD-X8 CAN bus.
-
-`throttle_duration_sec` keys its bucket on the call site rather than on the message, so
-six motors warning from one line all share a single bucket. The log then shows one
-arbitrary motor per interval, which reads like a rotating per-motor fault while hiding
-both the real rate and which motors are actually affected. Counting outcomes here and
-reporting on a timer gives the true per-motor numbers in a single line.
+Manual health checking of the CAN line, so that we can display CAN health in the tui.
 """
 
 from collections import Counter
@@ -21,10 +15,6 @@ REPORT_PERIOD_SEC = 5.0
 
 @dataclass(frozen=True)
 class CanHealthSnapshot:
-    """
-    The outcome counts for one reporting interval.
-    """
-
     period_sec: float
     polls: int = 0
     drops: int = 0
@@ -36,16 +26,11 @@ class CanHealthSnapshot:
 
     @property
     def healthy(self) -> bool:
-        """
-        True when nothing went wrong during the interval.
-        """
         return self.drops == 0 and self.faults == 0 and self.errors == 0
 
 
 def _formatByMotor(counts: dict[int, int]) -> str:
-    """
-    Renders per-motor counts as `m21:48 m22:47`, skipping motors with nothing to report.
-    """
+    # `m21:48 m22:47`, skipping the motors with nothing to report
     return " ".join(f"m{can_id}:{count}" for can_id, count in sorted(counts.items()) if count)
 
 
@@ -70,53 +55,32 @@ class CanHealth:
         self._timer = ros_node.create_timer(report_period_sec, self.report)
 
     def setStatusReporter(self, status: StatusReporter, motor_label: str) -> None:
-        """
-        Lets the node's bus health drive what it reports on /viator/node_status.
-        """
         self._status = status
         self._motor_label = motor_label
 
     def recordPoll(self, can_id: int) -> None:
-        """
-        Records an attempted state poll of the given motor.
-        """
         with self._lock:
             self._polls[can_id] += 1
 
     def recordDrop(self, can_id: int) -> None:
-        """
-        Records a dropped response (EAGAIN) from the given motor.
-        """
         with self._lock:
             self._drops[can_id] += 1
 
     def recordFault(self, can_id: int, detail: str) -> None:
-        """
-        Records a controller-reported fault on the given motor.
-        """
         with self._lock:
             self._faults[can_id] += 1
             self._detail_samples[f"fault:{can_id}"] = detail
 
     def recordError(self, can_id: int, detail: str) -> None:
-        """
-        Records any other CAN or driver error on the given motor.
-        """
         with self._lock:
             self._errors[can_id] += 1
             self._detail_samples[f"error:{can_id}"] = detail
 
     def latest(self) -> CanHealthSnapshot:
-        """
-        Returns the most recently reported interval, for status publication.
-        """
         with self._lock:
             return self._latest
 
     def report(self) -> None:
-        """
-        Logs the interval's aggregate counts and resets them.
-        """
         with self._lock:
             snapshot = CanHealthSnapshot(
                 period_sec=self._period_sec,
@@ -139,7 +103,7 @@ class CanHealth:
         logger = self._ros_node.get_logger()
 
         if snapshot.healthy:
-            # Only announce recovery once, on the transition back from degraded
+            # announce recovery once, on the way back from degraded
             if self._degraded:
                 logger.info(f"CAN recovered: {snapshot.polls} polls, no errors")
                 self._degraded = False

@@ -1,14 +1,4 @@
-# Two stages:
-#
-#   base   everything the rover needs to run, and nothing else
-#   dev    base plus the toolchain, this is what the container uses
-#
-# Source comes in over a bind mount either way, so nothing is baked into the image.
-
-# Pinning the full tag rather than `ros:humble` so the Ubuntu release is explicit. To pin
-# harder, resolve a digest with
-#   docker buildx imagetools inspect ros:humble-ros-base-jammy
-# and replace this with `ros@sha256:...`.
+# Ubuntu 22.04 with ROS 2 Humble
 FROM ros:humble-ros-base-jammy AS base
 
 # ---- system packages ----
@@ -33,8 +23,6 @@ RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
     && echo "/opt/ros/$ROS_DISTRO/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)" >> /etc/ld.so.conf.d/ros2.conf \
     && ldconfig
 
-# textual is pinned to the major the dashboard was written against; the rest are
-# constrained where a new major would plausibly break us.
 RUN pip3 install --no-cache-dir \
     "numpy<2" \
     moteus \
@@ -43,9 +31,9 @@ RUN pip3 install --no-cache-dir \
     pybind11 \
     pybind11-stubgen
 
-# ---- myactuator_rmd (RMD-X8 motor driver) ----
-# Pinned by commit rather than cloned from the branch tip: an upstream change used to be
-# able to alter the rover's motor driver with no corresponding change in this repo.
+# ---- myactuator_rmd for RMD-X8 motors ----
+
+    # https://github.com/2b-t/myactuator_rmd/commit/c43980cac5948cfd4974a96b86fbac0a80749ed6
 ARG MYACTUATOR_RMD_SHA=c43980cac5948cfd4974a96b86fbac0a80749ed6
 
 RUN git clone https://github.com/2b-t/myactuator_rmd.git /tmp/myactuator_rmd \
@@ -64,17 +52,11 @@ RUN useradd trickfire --shell /bin/bash --create-home --no-log-init -G video,sud
     && touch /home/trickfire/.sudo_as_admin_successful \
     && chown trickfire:trickfire /home/trickfire/.sudo_as_admin_successful
 
-# Bringing the CAN link up needs CAP_NET_ADMIN, which non-root trickfire doesn't get just
-# from the container's `privileged` setting, so grant NOPASSWD sudo for the CAN tooling
-# that setup-can-network.sh drives. The can_rmdx8 node is deliberately NOT listed here: it
-# has to run as trickfire like the rest of the ROS graph or cross-user FastDDS shared
-# memory drops its traffic, and an AF_CAN raw socket needs no capability to open.
+# non-sudo permissions to run can control related commands
 COPY .devcontainer/trickfire-can.sudoers /etc/sudoers.d/trickfire-can
 RUN chmod 0440 /etc/sudoers.d/trickfire-can && visudo -cf /etc/sudoers.d/trickfire-can
 
-# ---------------------------------------------------------------------------
-# dev: the devcontainer. Source comes in over a bind mount, nothing is baked in.
-# ---------------------------------------------------------------------------
+# ---- dev ----
 FROM base AS dev
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
@@ -88,15 +70,12 @@ RUN pip3 install --no-cache-dir \
     ruff \
     mypy \
     pre-commit \
-    "pydocstyle>=6.3.0" \
     && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
     -o /usr/local/bin/shfmt \
     && chmod +x /usr/local/bin/shfmt
 
 COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
 
-# How the scripts know they are already inside the container, so `make launch` can do the
-# right thing from either side without being told which side it is on.
 ENV VIATOR_CONTAINER=dev
 
 USER trickfire

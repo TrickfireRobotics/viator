@@ -1,8 +1,9 @@
-# Every target is a thin wrapper over a script in scripts/, so anything here can also be
-# run directly. Comments starting with `##` become the `make help` listing.
+# every target is a thin wrapper over the script of the same name in scripts/, so
+# anything here can also be run directly
+# comments starting with `##` are printed in `make help` keep this convention please
 
-.PHONY: help launch stop status tui graph build clean container connect can-setup \
-	can-service can-sudoers sync format hooks
+.PHONY: help launch tui raw build clean container connect can-setup \
+	can-sudoers sync format hooks
 
 .DEFAULT_GOAL := help
 
@@ -11,48 +12,39 @@
 help: ## show this list
 	@./scripts/help.sh $(MAKEFILE_LIST)
 
-launch: ## bring everything up and open the dashboard (the one you want)
+launch: ## main launch method
 	@./scripts/launch.sh $(FLAGS)
 
-stop: ## stop the node graph
-	@./scripts/stop.sh $(FLAGS)
-
-status: ## check the rover is actually ready
-	@./scripts/preflight.sh
-
-tui: ## open the dashboard against a rover that is already running
+tui: ## open tui with launch already running
 	@./scripts/tui.sh
 
-graph: ## run the node graph alone, in the foreground (no dashboard)
-	@./scripts/graph.sh
+raw: ## launch with no tui
+	@./scripts/raw.sh
 
 # --- the rover's CAN bus ---
 
-can-service: ## make CAN bringup automatic at boot (run once per rover)
-	@./scripts/install-can-service.sh
-
 can-setup: ## bring the CAN bus up right now, by hand
-	@./scripts/setup-can-network.sh
+	@./scripts/can.sh
 
-can-sudoers: ## let CAN bringup run without a sudo password (run once per rover)
-	@./scripts/install-can-sudoers.sh
+can-sudoers: ## add can commands to sudoers so they dont require sudo
+	@./scripts/can-sudoers.sh
 
 # --- development ---
 
-build: ## build the ROS 2 workspace
+build: ## build the ROS workspace
 	@./scripts/build.sh
 
-clean: ## delete colcon's build output
+clean: ## clean build files
 	rm -rf build install log
 
-container: ## build and attach to the dev container
-	@./scripts/container-launch.sh $(FLAGS)
+container: ## build and attach to the rover container
+	@./scripts/container.sh $(FLAGS)
 
-connect: ## attach a shell to the running dev container
-	@./scripts/connect-to-container.sh
+connect: ## attach a shell to the running rover container
+	@./scripts/container.sh -a
 
-sync: ## rsync this checkout to the rover (IP=, REMOTE_PATH=)
-	@./scripts/sync-to-orin.sh
+sync: ## rsync your codebase into the rover
+	@./scripts/sync.sh
 
 format: ## format python, shell, markdown and json
 	ruff format src

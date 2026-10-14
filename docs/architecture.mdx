@@ -22,7 +22,7 @@ viator/
 │   ├── tui/              # The terminal dashboard
 │   ├── viator_launch/    # Top-level launch file
 │   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
-├── scripts/              # Everything the Makefile runs (see below)
+├── scripts/              # one per make target, plus lib.sh (see below)
 ├── .devcontainer/        # Dockerfile + compose file for the container
 └── Makefile              # the entry point; `make` lists every target
 ```
@@ -31,19 +31,17 @@ viator/
 
 ## `scripts/` — the workflow
 
-Every `make` target is a thin wrapper over a script here, so anything can also be run directly. `scripts/lib/common.sh` holds the shared output helpers and environment checks, which is why `make launch` and `make status` report in the same format.
+Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly. `scripts/lib.sh` holds the shared output helpers, environment checks and the step runner, which is why every script reports in the same format.
 
 | Script | Purpose |
 | --- | --- |
-| `launch.sh` | The entry point. Dispatches to `up.sh` on the host or `run.sh` in the container, so `make launch` works from either side. |
-| `up.sh` | Host orchestration: check the host, bring CAN up, build and start the container, build the workspace, hand over to `run.sh`. |
-| `run.sh` | Starts the node graph in the background and the dashboard in the foreground, and stops the graph when the dashboard exits. |
-| `graph.sh` | The node graph alone, in the foreground. |
+| `launch.sh` | The whole bringup. On the host: check the host, bring CAN up, build and start the container, build the workspace, then re-run itself inside the container. In the container: start the node graph and hand the terminal to the dashboard. |
+| `raw.sh` | The node graph alone, in the foreground. |
 | `tui.sh` | The dashboard alone, attached to a rover that is already running. |
-| `stop.sh`, `preflight.sh` | Stop the graph; check the rover is ready. |
 | `build.sh` | `colcon build`. |
-| `setup-can-network.sh`, `install-can-service.sh` | CAN interface bringup and drivebase enable; the systemd unit that does it at boot. |
-| `container-launch.sh`, `connect-to-container.sh`, `sync-to-orin.sh` | Container shell access and rsyncing a checkout to the rover. |
+| `can.sh` | CAN interface bringup and drivebase enable. |
+| `can-sudoers.sh` | One-off rover setup: the sudoers rule that lets the bringup run without a password. |
+| `container.sh`, `sync.sh` | A shell in the dev container; rsyncing a checkout to the rover. |
 
 Scripts that need ROS sourced re-run themselves inside the container when they're started on the host, so there is no "wrong terminal" to be in.
 

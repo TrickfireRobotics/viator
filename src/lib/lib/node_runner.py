@@ -1,11 +1,9 @@
 """
-A single entry-point helper for every Viator node.
+One `main()` for every Viator node, so shutdown behaves the same everywhere.
 
-Each node used to hand-roll its own `main()`, and they disagreed about shutdown: some
-caught `KeyboardInterrupt`, some didn't, and some called `rclpy.shutdown()` after rclpy's
-own SIGINT handler had already torn the context down, which raises
-`RCLError: rcl_shutdown already called` and makes every clean Ctrl-C look like a crash.
-Routing all of them through here means shutdown behaves the same everywhere.
+Hand-rolled ones disagreed: some caught KeyboardInterrupt, some called
+`rclpy.shutdown()` after rclpy's SIGINT handler had already torn the context down, which
+raises and makes a clean Ctrl-C look like a crash.
 """
 
 import sys
@@ -27,9 +25,7 @@ ExecutorFactory = Callable[[Sequence[Node]], Executor]
 
 def multiThreaded(num_threads: int | None = None) -> ExecutorFactory:
     """
-    An executor factory for nodes whose callbacks must run concurrently.
-
-    Passing `None` lets rclpy size the pool from the CPU count.
+    For nodes whose callbacks must run concurrently. `None` sizes the pool from the CPUs.
     """
 
     def build(_: Sequence[Node]) -> Executor:
@@ -48,18 +44,9 @@ def runNodes(
     """
     Initializes rclpy, spins the node(s) the factory returns, and shuts down cleanly.
 
-    Parameters
-    ------
-    factory: NodeFactory
-        Builds the node or nodes to spin. Called after `rclpy.init`. Exceptions raised
-        here are deliberately left to propagate: a node that cannot start is a real
-        failure and should exit non-zero so the launch system notices.
-    args: list[str] | None
-        Command line arguments forwarded to `rclpy.init`.
-    executor_factory: ExecutorFactory | None
-        Builds the executor to spin with. Defaults to single threaded.
-    on_shutdown: Callable[[Sequence[Node]], None] | None
-        Cleanup run before the nodes are destroyed, for things like stopping motors.
+    `factory` is called after `rclpy.init`, and anything it raises propagates: a node
+    that cannot start should exit non-zero so the launch system notices. `on_shutdown`
+    runs before the nodes are destroyed, for things like stopping motors.
     """
 
     rclpy.init(args=args)

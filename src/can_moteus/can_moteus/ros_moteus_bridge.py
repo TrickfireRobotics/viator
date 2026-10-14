@@ -132,9 +132,6 @@ class RosMotuesBridge(Node):
 
 
 def _stopThreads(nodes: Sequence[Node]) -> None:
-    """
-    Joins the per-motor worker threads before the node is torn down.
-    """
     for node in nodes:
         if isinstance(node, RosMotuesBridge) and node.thread_manager is not None:
             node.thread_manager.terminateAllThreads()

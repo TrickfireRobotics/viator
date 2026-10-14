@@ -2,21 +2,9 @@
 
 ## Development Environment
 
-Development happens inside the provided container. The quickest way in is from the repo root:
+For editor integration, open the repo in VS Code with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) installed and choose **Reopen in Container** when prompted. Either way you get the same ROS 2 Humble environment everyone else builds and runs against.
 
-```bash
-make launch   # builds the container, builds the workspace, runs the rover
-make connect  # just a shell in the container
-make          # lists every target
-```
-
-For editor integration, open the repo in VS Code with the
-[Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-installed and choose **Reopen in Container** when prompted. Either way you get the same
-ROS 2 Humble environment everyone else builds and runs against.
-
-See [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) for the full
-workflow.
+See [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) for the full workflow.
 
 ## Code Style
 

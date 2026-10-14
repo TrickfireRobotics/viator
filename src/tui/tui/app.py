@@ -1,13 +1,8 @@
 """
-The Viator terminal dashboard: module status on top, live log and CAN traffic underneath.
+The Viator dashboard: module status on top, live log and CAN traffic underneath.
 
-Reads `/viator/node_status` for the status pane, follows the launch-output file for the
-log pane, and follows `candump` for the bus pane. The file is used alongside `/rosout` so
-startup output, Python tracebacks, and native-library warnings are present even when the
-dashboard opens after the graph starts.
-
-Everything here draws on a transparent background on purpose: the dashboard sits in the
-operator's terminal, so it borrows their colours rather than painting over them.
+The log follows the launch-output file as well as /rosout, so startup output, tracebacks
+and native-library warnings are there even when the dashboard opens late.
 """
 
 import base64
@@ -43,7 +38,6 @@ from .bridge import (
     StatusRecord,
 )
 
-# Levels the `f` key cycles through, as a minimum threshold.
 LEVEL_CYCLE = [LEVEL_DEBUG, LEVEL_INFO, LEVEL_WARN, LEVEL_ERROR]
 
 LEVEL_LABELS = {
@@ -53,9 +47,8 @@ LEVEL_LABELS = {
     LEVEL_ERROR: "error",
 }
 
-# The level marker is a gutter rather than a word: `INFO` down the left of four hundred
-# lines is four hundred repetitions of the least interesting thing on each one. A bar
-# that only changes colour when something is wrong reads at a glance and costs no width.
+# a gutter rather than the level's name: four hundred lines of `INFO` is four hundred
+# repetitions of the least interesting thing on each one
 LEVEL_GUTTER = {
     LEVEL_DEBUG: ("┊", "dim"),
     LEVEL_INFO: ("│", "dim"),
@@ -80,35 +73,31 @@ STATE_STYLES = {
 
 STALE_STYLE = "bold red"
 
-# One colour per CAN id, picked from the id itself so a given motor keeps its colour for
-# the whole run. Six motors all in one colour is a wall of hex; six colours is a pattern
-# you can see break when one of them stops answering.
+# picked from the id itself, so a motor keeps its colour all run and the pattern of six
+# visibly breaks when one of them stops answering
 BUS_ID_STYLES = ("cyan", "magenta", "green", "blue", "bright_cyan", "bright_magenta")
 
-# Width of the node column in the log. Long enough for every module name the rover has.
 NODE_WIDTH = 15
 
-# Everything to the left of a log message: `HH:MM:SS`, the level gutter, the module, and
-# a space before the message starts.
+# `HH:MM:SS`, the gutter, the module, and a space
 PREFIX_WIDTH = 8 + 3 + NODE_WIDTH + 1
 
-# Enough history to scroll back through a run without growing without bound.
 BUFFER_SIZE = 5000
 
-# The bus pane is a window on live traffic, not a record of it, so it keeps far less.
+# the bus pane is a window on live traffic, not a record of it
 BUS_BUFFER_SIZE = 500
 
-# Frames arrive faster than a terminal can usefully redraw, so the pane is refreshed with
-# the latest frame for each ID a few times per second instead of drawing a backlog.
+# frames arrive faster than a terminal can redraw, so the pane gets the latest frame per
+# id a few times a second rather than a backlog
 BUS_DRAIN_PERIOD_SEC = 0.25
 BUS_DISPLAY_LIMIT = 12
 
-# Matches the supervisor: a module republishes every second, so three misses means gone.
+# matches the supervisor: a module republishes every second, so three misses means gone
 STALE_AFTER_SEC = 3.0
 
 SAVE_DIR = Path.home() / ".ros" / "viator-tui"
 
-# Where the launch's own stdout went, if whatever started us said so. Set by scripts/run.sh.
+# where the launch's own stdout went, if whatever started us said so
 LAUNCH_LOG_HINT = os.environ.get("VIATOR_LAUNCH_LOG", "log/launch-latest.log")
 
 HELP_TEXT = f"""[bold]keys[/bold]
@@ -139,14 +128,8 @@ HELP_TEXT = f"""[bold]keys[/bold]
 
 
 def _copyToClipboard(app: App[None], text: str) -> str:
-    """
-    Copies text to the clipboard the operator is actually sitting at.
-
-    Over SSH that has to be the local machine, not the rover, so this goes through OSC 52:
-    the terminal emulator intercepts the escape sequence and does the copy at its end.
-    Textual's own helper handles tmux wrapping, so prefer it when the installed version
-    has it and fall back to writing the sequence directly.
-    """
+    # over SSH the clipboard that matters is the operator's, not the rover's, so this
+    # goes through OSC 52 and lets their terminal emulator do the copy
     copier = getattr(app, "copy_to_clipboard", None)
     if callable(copier):
         copier(text)
@@ -159,12 +142,7 @@ def _copyToClipboard(app: App[None], text: str) -> str:
 
 
 def shortNodeName(name: str) -> str:
-    """
-    The module name out of a ROS node name.
-
-    `/can_rmdx8_node` and `can_rmdx8` are the same module to anyone reading the log, and
-    the column is narrow, so spend its width on the part that differs.
-    """
+    # `/can_rmdx8_node` is `can_rmdx8`
     short = name.lstrip("/").rsplit("/", 1)[-1]
     if short.endswith("_node"):
         short = short[: -len("_node")]
@@ -174,16 +152,10 @@ def shortNodeName(name: str) -> str:
 
 
 class ViatorTui(App[None]):
-    """
-    The dashboard application.
-    """
-
     TITLE = "viator"
 
-    # The one theme whose colours are the terminal's own. Everything else in Textual
-    # paints an opaque surface underneath itself, so this is what makes the dashboard sit
-    # in the operator's terminal instead of on top of it, and it means the dashboard
-    # matches whatever palette they already run.
+    # the one theme whose colours are the terminal's own, so the dashboard sits in the
+    # operator's terminal rather than painting over it
     THEME = "ansi-dark"
 
     CSS = """
@@ -193,8 +165,7 @@ class ViatorTui(App[None]):
         background: transparent;
     }
 
-    /* The dashboard is a frame around the terminal's own background, not a replacement
-       for it, so nothing below here paints a surface of its own. */
+    /* nothing below here paints a surface of its own */
     Header, HeaderIcon, HeaderTitle, HeaderClock, HeaderClockSpace,
     Footer, FooterKey, DataTable, RichLog, Input, Vertical, Horizontal {
         background: transparent;
@@ -260,8 +231,7 @@ class ViatorTui(App[None]):
     #bus {
         padding: 0 1;
         overflow-x: hidden;
-        /* A live feed, not a document: there is nothing to scroll back to, so the bar
-           would only ever be decoration sitting in the narrowest pane. */
+        /* a live feed, not a document: there is nothing to scroll back to */
         scrollbar-size-vertical: 0;
     }
 
@@ -276,8 +246,7 @@ class ViatorTui(App[None]):
         display: block;
     }
 
-    /* The one thing that does get a background: it sits on top of the log and has to be
-       readable against whatever is under it. */
+    /* the one opaque thing in here: it covers the log while it is open */
     #help {
         layer: overlay;
         display: none;
@@ -287,8 +256,6 @@ class ViatorTui(App[None]):
         max-height: 100%;
         border: round $border;
         border-title-align: left;
-        /* The one opaque thing in the whole dashboard: it covers the log while it's
-           open, so it has to hide what's underneath rather than blend into it. */
         background: ansi_black;
         padding: 1 2;
         offset: 3 1;
@@ -339,9 +306,6 @@ class ViatorTui(App[None]):
             on_bus_state=self._handleBusState,
         )
 
-    # ***************
-    # Composition and lifecycle
-    # ***************
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True, icon="●")
 
@@ -387,13 +351,7 @@ class ViatorTui(App[None]):
     def on_unmount(self) -> None:
         self._bridge.stop()
 
-    # ***************
-    # Callbacks from the background threads
-    # ***************
     def _handleStatus(self, record: StatusRecord) -> None:
-        """
-        Called off the UI thread, so hand the work back to it.
-        """
         self.call_from_thread(self._applyStatus, record)
 
     def _handleLog(self, record: LogRecord) -> None:
@@ -427,13 +385,9 @@ class ViatorTui(App[None]):
             self.query_one("#log", RichLog).write(self._renderRecord(record))
 
     def _drainBus(self) -> None:
-        """
-        Refreshes the bus pane with the latest frame for each CAN ID.
-
-        The bus runs at thousands of frames a second when the drivebase is moving. Keep
-        the display current without rendering an ever-growing backlog, while counting
-        every received frame for the rate shown in the pane title.
-        """
+        # the bus runs at thousands of frames a second with the drivebase moving, so the
+        # pane shows the latest frame per id rather than an ever-growing backlog, and
+        # every frame is still counted for the rate in the title
         with self._bus_pending_lock:
             frames = list(self._bus_pending)
             self._bus_pending.clear()
@@ -455,13 +409,7 @@ class ViatorTui(App[None]):
             for frame in list(latest_by_id.values())[-BUS_DISPLAY_LIMIT:]:
                 pane.write(self._renderFrame(frame))
 
-    # ***************
-    # Rendering
-    # ***************
     def _shouldShow(self, record: LogRecord) -> bool:
-        """
-        Whether a record passes the level threshold and the text filter.
-        """
         if record.level < LEVEL_CYCLE[self._level_index]:
             return False
         if self._search and self._search.lower() not in record.message.lower():
@@ -469,13 +417,8 @@ class ViatorTui(App[None]):
         return True
 
     def _renderRecord(self, record: LogRecord) -> Table:
-        """
-        One log line: timestamp, level gutter, module, message.
-
-        A two column grid rather than one string, so a message too long for the pane
-        wraps under itself instead of starting again at the left margin and breaking up
-        the column of timestamps that makes the log scannable.
-        """
+        # a two column grid rather than one string, so a long message wraps under itself
+        # instead of breaking the column of timestamps that makes the log scannable
         glyph, glyph_style = LEVEL_GUTTER.get(record.level, ("│", "dim"))
         prefix = Text.assemble(
             (record.clock, "dim"),
@@ -492,9 +435,6 @@ class ViatorTui(App[None]):
         return line
 
     def _renderFrame(self, frame: CanFrame) -> Text:
-        """
-        One CAN frame: id, length, payload.
-        """
         try:
             style = BUS_ID_STYLES[int(frame.can_id, 16) % len(BUS_ID_STYLES)]
         except ValueError:
@@ -506,9 +446,6 @@ class ViatorTui(App[None]):
         )
 
     def _redrawLog(self) -> None:
-        """
-        Rewrites the whole pane from the buffer, for when a filter changes.
-        """
         pane = self.query_one("#log", RichLog)
         pane.clear()
         for record in self._records:
@@ -516,9 +453,6 @@ class ViatorTui(App[None]):
                 pane.write(self._renderRecord(record))
 
     def _refreshStatus(self) -> None:
-        """
-        Rebuilds the status table. Cheap: there are only ever a handful of rows.
-        """
         table = self.query_one("#status", DataTable)
         table.clear()
 
@@ -537,17 +471,11 @@ class ViatorTui(App[None]):
         self._updateTitles()
 
     def _refreshBusRate(self) -> None:
-        """
-        Turns a second's worth of frames into the rate shown on the bus pane.
-        """
         self._bus_rate = self._bus_count
         self._bus_count = 0
         self._updateTitles()
 
     def _statusSummary(self) -> Text:
-        """
-        The modules border subtitle: how many are fine and how many aren't.
-        """
         now = time.monotonic()
         healthy = sum(
             1
@@ -562,9 +490,6 @@ class ViatorTui(App[None]):
         return Text(f"{healthy}/{total} ok", style=style)
 
     def _updateTitles(self) -> None:
-        """
-        Keeps the pane borders showing what each pane is currently doing.
-        """
         status = self.query_one("#status", DataTable)
         status.border_subtitle = self._statusSummary()
 
@@ -586,13 +511,7 @@ class ViatorTui(App[None]):
                 style="dim" if self._bus_rate else "yellow",
             )
 
-    # ***************
-    # Actions
-    # ***************
     def action_toggle_pause(self) -> None:
-        """
-        Freezes the log pane. A log this fast is unreadable while it's moving.
-        """
         self._paused = not self._paused
         pane = self.query_one("#log", RichLog)
         pane.auto_scroll = not self._paused
@@ -601,41 +520,22 @@ class ViatorTui(App[None]):
         self._updateTitles()
 
     def action_cycle_level(self) -> None:
-        """
-        Steps the minimum severity shown.
-        """
         self._level_index = (self._level_index + 1) % len(LEVEL_CYCLE)
         self._redrawLog()
         self._updateTitles()
 
     def action_focus_search(self) -> None:
-        """
-        Reveals and focuses the text filter.
-        """
         search = self.query_one("#search", Input)
         search.add_class("visible")
         search.focus()
 
     def action_toggle_bus(self) -> None:
-        """
-        Hides the bus pane, for when the log is the thing you're reading.
-        """
         self.query_one("#bus-pane", Vertical).toggle_class("hidden")
 
     def action_toggle_help(self) -> None:
-        """
-        Shows what the keys do and what the states mean.
-
-        The footer lists the keys but not what any of them are for, and the status column
-        is four words that only make sense if you already know them. This is the answer to
-        "I opened the dashboard, now what".
-        """
         self.query_one("#help", Static).toggle_class("visible")
 
     def action_clear_search(self) -> None:
-        """
-        Drops the text filter and hides the input again.
-        """
         search = self.query_one("#search", Input)
         search.value = ""
         search.remove_class("visible")
@@ -645,12 +545,6 @@ class ViatorTui(App[None]):
         self.query_one("#log", RichLog).focus()
 
     def action_dismiss_overlays(self) -> None:
-        """
-        What escape does: close the help panel if it's open, otherwise drop the filter.
-
-        One key for "get me back to the log" rather than one per thing that could be
-        covering it.
-        """
         help_panel = self.query_one("#help", Static)
         if help_panel.has_class("visible"):
             help_panel.remove_class("visible")
@@ -658,9 +552,6 @@ class ViatorTui(App[None]):
         self.action_clear_search()
 
     def action_copy(self) -> None:
-        """
-        Copies everything currently visible in the log pane.
-        """
         text = "\n".join(self._visibleLines())
         if not text:
             self.notify("nothing to copy", severity="warning")
@@ -668,12 +559,6 @@ class ViatorTui(App[None]):
         self.notify(_copyToClipboard(self, text))
 
     def action_save(self) -> None:
-        """
-        Writes the visible log to a file on the rover.
-
-        The clipboard is convenient but a file is the thing you still have after a failed
-        run, so both exist.
-        """
         lines = self._visibleLines()
         if not lines:
             self.notify("nothing to save", severity="warning")
@@ -685,18 +570,12 @@ class ViatorTui(App[None]):
         self.notify(f"saved {len(lines)} lines to {path}")
 
     def _visibleLines(self) -> list[str]:
-        """
-        The log as plain text, for the clipboard and for saving.
-        """
         return [
             f"{r.clock} {r.level_name:<5} {r.node}  {r.message}"
             for r in self._records
             if self._shouldShow(r)
         ]
 
-    # ***************
-    # Widget events
-    # ***************
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self._search = event.value.strip()
         self._redrawLog()
@@ -705,9 +584,6 @@ class ViatorTui(App[None]):
 
 
 def main() -> None:
-    """
-    The entry point of the dashboard.
-    """
     ViatorTui().run()
 
 

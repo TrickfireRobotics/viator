@@ -1,11 +1,11 @@
 import glob
 import re
 
-import cv2  # OpenCV library
+import cv2
 import rclpy.logging
-from cv_bridge import CvBridge  # Package to convert between ROS and OpenCV Images
-from rclpy.node import Node  # Handles the creation of nodes
-from sensor_msgs.msg import CompressedImage  # Image is the message type
+from cv_bridge import CvBridge
+from rclpy.node import Node
+from sensor_msgs.msg import CompressedImage
 
 from lib.node_runner import multiThreaded, runNodes
 from lib.status import StatusReporter
@@ -14,12 +14,8 @@ CAPTURE_PERIOD_SEC = 0.1
 
 
 def _silenceOpenCvLogs() -> None:
-    """
-    Stops OpenCV's C++ logger printing a GStreamer/V4L2 warning for every device probe.
-
-    These come from OpenCV itself rather than rclpy, so ROS log levels don't touch them.
-    The accessor moved between OpenCV 4.x releases, so try both spellings.
-    """
+    # a GStreamer/V4L2 warning per device probe, from OpenCV's own C++ logger, so ROS log
+    # levels don't touch it. The accessor moved between OpenCV 4.x releases.
     try:
         cv2.setLogLevel(cv2.LOG_LEVEL_ERROR)
         return
@@ -34,13 +30,6 @@ def _silenceOpenCvLogs() -> None:
 
 
 def _videoDeviceIds() -> list[int]:
-    """
-    Returns the numbers of the `/dev/video*` nodes that actually exist, in order.
-
-    The old implementation walked indices upward until six consecutive failures, which
-    meant opening half a dozen devices that were never there and printing an OpenCV
-    warning for each. Asking the filesystem first means we only probe real hardware.
-    """
     ids = []
     for path in glob.glob("/dev/video*"):
         match = re.fullmatch(r"/dev/video(\d+)", path)
@@ -50,13 +39,8 @@ def _videoDeviceIds() -> list[int]:
 
 
 def getCameras() -> list[int]:
-    """
-    Returns the device ids of every camera that exists and delivers a frame.
-
-    Cameras commonly expose more than one `/dev/video*` node (a capture node plus a
-    metadata node), so existing on disk isn't enough. A device only counts if it opens
-    and a read succeeds.
-    """
+    # a camera commonly exposes more than one /dev/video* node (capture plus metadata),
+    # so a device only counts if it opens and a read succeeds
     _silenceOpenCvLogs()
     logger = rclpy.logging.get_logger("camera")
 
@@ -72,7 +56,6 @@ def getCameras() -> list[int]:
             if is_reading:
                 working.append(device_id)
         finally:
-            # the old probe never released these, leaking a file descriptor per device
             capture.release()
 
     if not working:
@@ -85,28 +68,23 @@ def getCameras() -> list[int]:
 
 class RosCamera(Node):
     def __init__(self, index: int, device_id: int) -> None:
-        # Each camera gets its own node name. They used to share one, which collided in
-        # the graph and made per-node parameters ambiguous.
+        # one node name per camera: they used to share one, which collided in the graph
         super().__init__(f"camera_{index}")
 
         self._device_id = device_id
-        # Set by _buildCameraNodes on the first node only; the status topic tracks the
-        # camera module as a whole rather than each capture node.
+        # set by _buildCameraNodes on the first node only, because the status topic tracks
+        # the camera module rather than each capture node
         self.status: StatusReporter | None = None
         topic_name = f"video_frames{index}"
 
-        # Create the publisher. This publisher will publish an Image
-        # to the video_frames topic. The queue size is 10 messages.
         self._publisher = self.create_publisher(CompressedImage, topic_name, 10)
 
-        # Create a VideoCapture object
         self.cap = cv2.VideoCapture(device_id)
         if not self.cap.isOpened():
             self.get_logger().error(f"failed to open /dev/video{device_id}")
         else:
             self.get_logger().info(f"publishing /dev/video{device_id} to {topic_name}")
 
-        # Used to convert between ROS and OpenCV images
         self.br = CvBridge()
 
         self.declare_parameter("deviceId", device_id)
@@ -114,37 +92,21 @@ class RosCamera(Node):
         self.timer = self.create_timer(CAPTURE_PERIOD_SEC, self.publishCameraFrame)
 
     def publishCameraFrame(self) -> None:
-        """
-        Callback function publishes a frame captured from a camera to /video_framesX (X is specific
-        camera ID) every 0.1 seconds
-        """
-
-        # Capture frame-by-frame
-        # This method returns True/False as well as the video frame.
         ret, frame = self.cap.read()
-
         if ret:
-            # Publish the image.
             self._publisher.publish(self.br.cv2_to_compressed_imgmsg(frame))
 
     def destroy_node(self) -> bool:
-        """
-        Releases the capture device before tearing the node down.
-        """
         if self.cap is not None:
             self.cap.release()
         return super().destroy_node()
 
 
 def _buildCameraNodes() -> list[RosCamera]:
-    """
-    Builds one node per working camera, numbered by publish order rather than device id.
-    """
     device_ids = getCameras()
     nodes = [RosCamera(index, device_id) for index, device_id in enumerate(device_ids)]
 
-    # One report for the whole process, hung off the first node, since the status topic
-    # tracks modules rather than individual camera nodes.
+    # one report for the whole module, hung off the first node
     if nodes:
         status = StatusReporter(nodes[0], "camera")
         status.ok(f"{len(device_ids)} cameras: {device_ids}")
@@ -154,11 +116,7 @@ def _buildCameraNodes() -> list[RosCamera]:
 
 
 def main(args: list[str] | None = None) -> None:
-    """
-    The entry point of the node.
-    """
-
-    # a MultiThreadedExecutor so each camera's capture timer can run concurrently
+    # multi threaded so each camera's capture timer can run concurrently
     runNodes(_buildCameraNodes, args=args, executor_factory=multiThreaded())
 
 

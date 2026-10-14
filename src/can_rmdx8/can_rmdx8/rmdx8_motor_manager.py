@@ -25,11 +25,10 @@ class RMDx8MotorManager(Node):
     Class to manage the control and storage of RMDx8 motors in the ROS system.
     """
 
-    # String identifier for updating motor state
     _UPDATE_STATE = "UPDATE_STATE"
 
-    # Matches the default in scripts/lib/common.sh, which exports CAN_IFACE into the
-    # container, so overriding it there is enough to move the whole stack to another bus.
+    # the scripts export CAN_IFACE into the container, so setting it there moves the whole
+    # stack to another bus
     _DEFAULT_CAN_IFACE = "can0"
 
     def __init__(self) -> None:
@@ -129,30 +128,20 @@ class RMDx8MotorManager(Node):
 
 
 def _buildExecutor(nodes: Sequence[Node]) -> Executor:
-    """
-    Each motor has a timer + subscriber callback that can run concurrently, so allocate
-    2 threads per motor with a minimum of 4 to avoid spin_once crashes.
-    """
+    # each motor has a timer and a subscriber callback that can run at the same time, so
+    # 2 threads per motor, and at least 4 or spin_once crashes
     manager = nodes[0]
     assert isinstance(manager, RMDx8MotorManager)
     return MultiThreadedExecutor(num_threads=max(2 * manager.motorCount() + 2, 4))
 
 
 def _stopMotors(nodes: Sequence[Node]) -> None:
-    """
-    Brings the motors to a stop before the node is torn down.
-    """
     for node in nodes:
         if isinstance(node, RMDx8MotorManager):
             node.shutdownMotors()
 
 
-# Main function
 def main(args: list[str] | None = None) -> None:
-    """
-    The entry point for RMDx8
-    """
-
     runNodes(
         RMDx8MotorManager,
         args=args,
@@ -161,6 +150,5 @@ def main(args: list[str] | None = None) -> None:
     )
 
 
-# If script is run directly, then create a RMDx8MotorManager object and run the main function
 if __name__ == "__main__":
     main(sys.argv)

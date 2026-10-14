@@ -11,6 +11,7 @@
                 "ms-python.mypy-type-checker",
                 "charliermarsh.ruff",
                 "mkhl.shfmt",
+                "mads-hartmann.bash-ide-vscode",
                 "esbenp.prettier-vscode",
                 "unifiedjs.vscode-mdx",
                 "ms-vscode.cmake-tools"

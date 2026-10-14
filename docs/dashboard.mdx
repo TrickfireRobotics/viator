@@ -65,13 +65,13 @@ Press `?` at any time for the same reference this page gives, inside the app.
 
 Each node reports its own health to `/viator/node_status` once it has finished starting, which is not the same as having started. The coloured dot repeats the state so you can scan the column without reading it.
 
-| State      | Means                                                            | What to do                                                             |
-| ---------- | ---------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `starting` | Constructed, but hasn't finished bringing itself up              | Wait a few seconds. If it sticks here, it's hung in its constructor    |
-| `ok`       | Started and doing its job                                        | Nothing                                                                |
-| `degraded` | Running, but something is wrong                                  | Read the detail column, it says what                                   |
-| `failed`   | Running, but can't do its job at all                             | Read the detail column, then the log for that module                   |
-| `stale`    | Stopped reporting for three seconds, so it died or hung          | Read the last thing it logged, that's where it went                    |
+| State | Means | What to do |
+| --- | --- | --- |
+| `starting` | Constructed, but hasn't finished bringing itself up | Wait a few seconds. If it sticks here, it's hung in its constructor |
+| `ok` | Started and doing its job | Nothing |
+| `degraded` | Running, but something is wrong | Read the detail column, it says what |
+| `failed` | Running, but can't do its job at all | Read the detail column, then the log for that module |
+| `stale` | Stopped reporting for three seconds, so it died or hung | Read the last thing it logged, that's where it went |
 
 The detail column is the module's own one-line summary: how many motors it found, how many cameras, whether mission control is connected. That is usually the fastest answer to "is this plugged in".
 
@@ -102,12 +102,12 @@ The pane on the right runs `candump` on the interface the rover is wired to (`ca
 
 The modules table tells you what `can_rmdx8` believes about the bus. This tells you what is actually on the wire, which is the question you have when nothing is moving and every module still says `ok`:
 
-| What you see                      | Means                                                              |
-| --------------------------------- | ------------------------------------------------------------------ |
-| Frames scrolling, several ids     | The bus is working                                                 |
-| `0/s` in yellow, modules all `ok` | Nothing is reaching the wire - transceiver, wiring, or termination  |
-| Fewer ids than motors             | The missing ids are the motors that aren't answering               |
-| `can0 is not up`                  | The interface is down; `make can-setup` brings it up               |
+| What you see | Means |
+| --- | --- |
+| Frames scrolling, several ids | The bus is working |
+| `0/s` in yellow, modules all `ok` | Nothing is reaching the wire - transceiver, wiring, or termination |
+| Fewer ids than motors | The missing ids are the motors that aren't answering |
+| `can0 is not up` | The interface is down; `make can-setup` brings it up |
 
 Press `b` to hide the pane and give the log the full width.
 
@@ -178,18 +178,17 @@ The order that gets you to an answer fastest:
 
 The log pane follows the launch output, including ROS logs, Python tracebacks, and OpenCV's own C++ warnings:
 
-| How you started it | Where that output goes       |
-| ------------------ | ---------------------------- |
-| `make launch`      | `log/launch-latest.log`      |
-| `make graph`       | the terminal and `log/launch-latest.log` |
+| How you started it | Where that output goes                   |
+| ------------------ | ---------------------------------------- |
+| `make launch`      | `log/launch-latest.log`                  |
+| `make raw`         | the terminal and `log/launch-latest.log` |
 
 Press `?` and the help panel names the file in use for the current session.
 
 <Accordions>
     <Accordion title="The dashboard is empty and nothing is arriving">
-        Nothing is publishing, which means the node graph isn't running. Check with `make status`,
-        and if you started it with `make launch` read the tail of `log/launch-latest.log` - the
-        graph failing on startup is the usual cause.
+        Nothing is publishing, which means the node graph isn't running. Read the tail of
+        `log/launch-latest.log` - the graph failing on startup is the usual cause.
     </Accordion>
     <Accordion title="Every module shows stale at once">
         The graph shut down underneath the dashboard. A node that commands motors exited and the

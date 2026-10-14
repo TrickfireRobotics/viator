@@ -145,11 +145,8 @@ class RMDx8Motor:
         except myactuator_rmd_py.can.SocketException as e:
             self._health.recordError(self.config.can_id, f"command: {e}")
         except Exception as e:
-            # The driver's exceptions aren't all under one base class, so a bus
-            # glitch here must never be allowed to kill the whole node. Include
-            # the exception's type since the driver doesn't give these a common
-            # base class to catch, and knowing the type is what lets us add a
-            # proper except clause for it later instead of it hiding here.
+            # the driver's exceptions have no common base class, so a bus glitch would
+            # otherwise kill the node. The type is logged so it can get its own clause.
             self._health.recordError(self.config.can_id, f"command: {type(e).__name__}: {e}")
 
     def publishData(self) -> None:
@@ -160,8 +157,8 @@ class RMDx8Motor:
         try:
             with self.mutex_lock:
                 self._poll_count += 1
-                # Power and acceleration change slowly — only query every 5 ticks
-                # to reduce CAN bus traffic from 4 transactions/poll to 2.
+                # power and acceleration change slowly, so querying every 5th tick takes
+                # the bus traffic from 4 transactions per poll to 2
                 if self._poll_count % 5 == 0:
                     self._last_power = self.motor.getMotorPower()
                     self._last_acceleration = self.motor.getAcceleration()

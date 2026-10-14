@@ -40,9 +40,6 @@ class Arm(Node):
         self._status.ok("mode disabled")
 
     def _modeName(self) -> str:
-        """
-        The current mode as a readable name, tolerating a value mission control shouldn't send.
-        """
         try:
             return ArmModeEnum(self.current_mode).name.lower()
         except ValueError:
@@ -73,10 +70,6 @@ class Arm(Node):
 
 
 def main(args: list[str] | None = None) -> None:
-    """
-    The entry point of the node.
-    """
-
     runNodes(Arm, args=args)
 
 

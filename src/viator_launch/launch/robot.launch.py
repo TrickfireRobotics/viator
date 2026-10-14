@@ -2,18 +2,15 @@ import launch
 from launch.actions import Shutdown
 from launch_ros.actions import Node
 
-# launch prefixes every output line with the process name, which just duplicates the node
-# name rcutils already prints. Keep rcutils' copy and drop launch's.
+# launch's own prefix is the process name, which rcutils already prints as the node name
 LINE_ONLY = "{line}"
 
-# How long to wait before bringing a crashed node back. Long enough that a node failing
-# at startup can't spin into a tight restart loop.
+# long enough that a node failing at startup can't spin into a tight restart loop
 RESPAWN_DELAY = 5.0
 
-# Nodes that command motors are launched with on_exit=Shutdown(). If one of them dies the
-# motors keep whatever setpoint they were last given, so limping along without it is worse
-# than stopping: taking the whole graph down SIGINTs can_rmdx8, whose shutdown hook stops
-# the motors. Everything else is safe to simply restart.
+# Nodes that command motors get on_exit=Shutdown(): if one dies the motors keep their last
+# setpoint, so taking the graph down is better than limping on, because it SIGINTs
+# can_rmdx8 and its shutdown hook stops them. Everything else is safe to restart.
 
 can_moteus_node = Node(
     package="can_moteus",
@@ -31,10 +28,10 @@ drivebase_node = Node(
     on_exit=Shutdown(),
 )
 
-# Has to run as trickfire like the rest of the graph, not under sudo: FastDDS falls back to
-# shared memory for same-host traffic and those /dev/shm segments are 0644, so a root node
-# and a trickfire node discover each other but silently exchange no data. Opening an AF_CAN
-# raw socket needs no capability anyway (unlike AF_INET), only bringing the link up does.
+# Runs as trickfire like the rest of the graph, not under sudo: FastDDS uses shared memory
+# for same-host traffic and those /dev/shm segments are 0644, so a root node and a
+# trickfire node discover each other and then silently exchange no data. An AF_CAN raw
+# socket needs no privileges anyway, only bringing the link up does.
 can_rmdx8_node = Node(
     package="can_rmdx8",
     executable="can_rmdx8",
@@ -69,8 +66,8 @@ mission_control_updater_node = Node(
     respawn_delay=RESPAWN_DELAY,
 )
 
-# One node per working camera, so no name= here. Respawning also covers the case where no
-# camera was present at startup and one gets plugged in later.
+# one node per working camera, so no name= here, and respawning covers a camera that gets
+# plugged in after startup
 camera_node = Node(
     package="camera",
     executable="roscamera",
@@ -79,10 +76,9 @@ camera_node = Node(
     respawn_delay=RESPAWN_DELAY,
 )
 
-# Previously an IncludeLaunchDescription of rosbridge's own XML launch file. Declaring the
-# nodes directly means we can set their log level: rosbridge logs every client connect and
-# every topic subscription at INFO, which was the bulk of the console output. The parameter
-# names match the launch arguments the XML accepted.
+# Declared directly rather than including rosbridge's own XML launch file, so the log
+# level can be set: it logs every client connect and every subscription at INFO, which was
+# the bulk of the console output. The parameter names match the XML's arguments.
 rosbridge_node = Node(
     package="rosbridge_server",
     executable="rosbridge_websocket",
@@ -101,8 +97,8 @@ rosbridge_node = Node(
     respawn_delay=RESPAWN_DELAY,
 )
 
-# rosapi backs mission control's topic and service introspection. The globs are passed
-# explicitly as empty strings, which is what rosbridge's XML launch file did.
+# backs mission control's topic and service introspection. The empty globs are what
+# rosbridge's XML launch file passed.
 rosapi_node = Node(
     package="rosapi",
     executable="rosapi_node",
@@ -120,8 +116,7 @@ rosapi_node = Node(
     respawn_delay=RESPAWN_DELAY,
 )
 
-# Watches /viator/node_status and prints one readable readiness summary. Purely an
-# observer, so it is safe to restart.
+# watches /viator/node_status and says once whether the rover came up
 supervisor_node = Node(
     package="supervisor",
     executable="supervisor",

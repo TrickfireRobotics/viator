@@ -33,10 +33,6 @@ class MissionControlUpdater(Node):
 
 
 def main(args: list[str] | None = None) -> None:
-    """
-    The entry point of the node.
-    """
-
     runNodes(MissionControlUpdater, args=args)
 
 

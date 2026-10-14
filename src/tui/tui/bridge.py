@@ -1,13 +1,9 @@
 """
-The ROS side of the dashboard.
+The ROS side of the dashboard: a read-only observer, not launched with the rover.
 
-This is a read-only observer, deliberately not launched with the rover. The rover runs
-under its own launch lifecycle and this attaches to look at it, so closing the dashboard,
-losing SSH, or crashing it cannot take the rover down with it.
-
-rclpy and Textual each want to own an event loop, so rather than trying to merge them the
-executor is spun on its own thread and results are handed over through plain callables.
-The app wraps those in `call_from_thread` before touching any widget.
+rclpy and Textual each want to own an event loop, so the executor spins on its own
+thread and hands results over through plain callables. The app wraps those in
+`call_from_thread` before touching a widget.
 """
 
 import os
@@ -32,7 +28,7 @@ from lib.status import STATUS_TOPIC
 
 ROSOUT_TOPIC = "/rosout"
 
-# The bus the rover is wired to. Set by the scripts, which are the only thing that knows.
+# set by the scripts, which are the only thing that knows
 CAN_IFACE = os.environ.get("CAN_IFACE", "can0")
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -40,24 +36,20 @@ _LAUNCH_LINE = re.compile(r"^\[(DEBUG|INFO|WARN(?:ING)?|ERROR|FATAL)\]\s+\[([^]]
 _NATIVE_WARNING = re.compile(r"^\[\s*WARN(?::\d+)?\]")
 _ERROR_TEXT = re.compile(r"^(Traceback|[A-Za-z_][\w.]*Error:|[A-Za-z_][\w.]*Exception:)")
 
-# Launch's own bookkeeping. True, and worth having, but it is the same dozen lines at the
-# top of every single run and it buries the lines that differ between runs. Demoted to
-# debug rather than dropped, so `f` still gets you to it.
+# launch's own bookkeeping: the same dozen lines at the top of every run, which bury the
+# ones that differ. Demoted to debug rather than dropped, so `f` still gets you to it.
 _LAUNCH_PLUMBING = re.compile(
     r"^(All log files can be found below|Default logging verbosity is set to"
     r"|process started with pid|process has finished cleanly)"
 )
 
-# One candump line: `  can0  155   [8]  00 01 02 03 04 05 06 07`.
+# `  can0  155   [8]  00 01 02 03 04 05 06 07`
 _CAN_FRAME = re.compile(r"^\s*(\S+)\s+([0-9A-Fa-f]+)\s+\[(\d+)\]\s*(.*)$")
 
 
 def _asLevel(value: int | bytes) -> int:
-    """
-    rosidl generates Log's level constants (Log.DEBUG etc) as single-byte `bytes`
-    objects, but a received message's `level` field deserializes as a plain `int`.
-    Everything in the dashboard compares levels as `int`, so constants go through here.
-    """
+    # rosidl generates Log's level constants as single-byte `bytes`, but a received
+    # message's `level` deserializes as `int`, and everything here compares as `int`
     return value[0] if isinstance(value, bytes) else value
 
 
@@ -78,10 +70,6 @@ LEVEL_NAMES = {
 
 @dataclass(frozen=True)
 class LogRecord:
-    """
-    One line from /rosout, already split into the fields we render.
-    """
-
     level: int
     level_name: str
     node: str
@@ -91,18 +79,11 @@ class LogRecord:
 
     @property
     def clock(self) -> str:
-        """
-        The timestamp as local `HH:MM:SS`, which is all that fits and all anyone reads.
-        """
         return datetime.fromtimestamp(self.seconds).strftime("%H:%M:%S")
 
 
 @dataclass(frozen=True)
 class CanFrame:
-    """
-    One frame off the bus, as candump printed it.
-    """
-
     iface: str
     can_id: str
     dlc: int
@@ -111,23 +92,14 @@ class CanFrame:
 
 @dataclass(frozen=True)
 class StatusRecord:
-    """
-    One module's latest self-report.
-    """
-
     name: str
     state: int
     detail: str
 
 
 def parseLaunchLine(line: str) -> LogRecord:
-    """
-    Turns one launch-console line into a dashboard record.
-
-    Launch also writes tracebacks and native-library diagnostics, neither of which is a
-    ROS log message. Keep those visible as INFO rather than discarding them because they
-    are often the reason the graph stopped.
-    """
+    # launch also writes tracebacks and native-library diagnostics, which aren't ROS log
+    # messages but are often the reason the graph stopped, so they stay visible
     text = _ANSI_ESCAPE.sub("", line).rstrip("\r\n")
     match = _LAUNCH_LINE.match(text)
     seconds = int(time.time())
@@ -147,8 +119,6 @@ def parseLaunchLine(line: str) -> LogRecord:
 
 
 class LaunchLogTail:
-    """Reads existing launch output and follows it until the dashboard closes."""
-
     def __init__(self, path: Path, on_log: Callable[[LogRecord], None]) -> None:
         self._path = path
         self._on_log = on_log
@@ -188,15 +158,14 @@ class LaunchLogTail:
 
 class CanTail:
     """
-    Follows `candump` on one interface for the bus pane.
+    Follows `candump` for the bus pane.
 
     The status topic says a module thinks the bus is healthy; this says whether anything
-    is actually on the wire, which is the question you have when a motor isn't moving and
-    every module still reports ok. Runs candump rather than opening a socket so it needs
-    no privileges the dashboard doesn't already have.
+    is on the wire, which is the question you have when every module reports ok and a
+    motor still isn't moving.
     """
 
-    # candump exits if the interface goes away. Come back rather than leaving a dead pane.
+    # candump exits if the interface goes away, so come back rather than leave a dead pane
     RETRY_SEC = 2.0
 
     def __init__(
@@ -225,8 +194,7 @@ class CanTail:
             self._thread = None
 
     def _command(self) -> list[str]:
-        # candump block-buffers when its stdout is a pipe, which turns a live feed into
-        # output that arrives 4KB at a time.
+        # candump block-buffers into a pipe, which turns a live feed into 4KB at a time
         command = ["candump", self._iface]
         if shutil.which("stdbuf"):
             return ["stdbuf", "-oL", *command]
@@ -271,10 +239,6 @@ class CanTail:
 
 
 class ObserverNode(Node):
-    """
-    Subscribes to the status topic and the aggregated log topic. Publishes nothing.
-    """
-
     def __init__(
         self,
         on_status: Callable[[StatusRecord], None],
@@ -287,8 +251,8 @@ class ObserverNode(Node):
 
         self.create_subscription(NodeStatus, STATUS_TOPIC, self._statusCallback, 10)
 
-        # /rosout can burst hard when the CAN bus misbehaves, so keep a deep queue and
-        # accept best-effort delivery: dropping a line is better than blocking a node.
+        # /rosout bursts hard when the bus misbehaves, so keep a deep queue and accept
+        # best-effort delivery: dropping a line beats blocking a node
         self.create_subscription(
             Log,
             ROSOUT_TOPIC,
@@ -314,10 +278,6 @@ class ObserverNode(Node):
 
 
 class RosBridge:
-    """
-    Owns the rclpy context and the thread its executor spins on.
-    """
-
     def __init__(
         self,
         on_status: Callable[[StatusRecord], None],
@@ -335,9 +295,6 @@ class RosBridge:
         self._can_tail = CanTail(CAN_IFACE, on_frame, on_bus_state)
 
     def start(self) -> None:
-        """
-        Brings up rclpy and starts spinning on a background thread.
-        """
         rclpy.init()
         self._node = ObserverNode(self._on_status, self._on_log)
         self._executor = SingleThreadedExecutor()
@@ -350,9 +307,6 @@ class RosBridge:
         self._can_tail.start()
 
     def stop(self) -> None:
-        """
-        Tears everything down. Safe to call more than once.
-        """
         if self._launch_tail is not None:
             self._launch_tail.stop()
         self._can_tail.stop()

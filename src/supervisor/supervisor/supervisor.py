@@ -1,10 +1,9 @@
 """
-Turns the per-node reports on `/viator/node_status` into one readable answer to
-"is the rover ready".
+Turns the reports on `/viator/node_status` into one answer to "is the rover ready".
 
-Without this, judging readiness meant scrolling a launch log and knowing which lines were
-load-bearing. This says ready or not once the expected nodes have checked in, and after
-that only speaks up when something changes state.
+Says ready or not once the expected nodes have checked in, then only speaks up when
+something changes state. Without it, judging readiness meant scrolling a launch log and
+knowing which lines were load-bearing.
 """
 
 import time
@@ -17,8 +16,8 @@ from lib.color_codes import ColorCodes, colorStr
 from lib.node_runner import runNodes
 from lib.status import STATE_NAMES, STATUS_TOPIC
 
-# The modules the launch file starts. Overridable with the `expected_nodes` parameter so
-# a partial bringup (bench testing one subsystem) doesn't report false failures.
+# overridable with the `expected_nodes` parameter, so a partial bringup for bench testing
+# doesn't report false failures
 DEFAULT_EXPECTED_NODES = [
     "drivebase",
     "can_rmdx8",
@@ -30,9 +29,8 @@ DEFAULT_EXPECTED_NODES = [
     "rosapi",
 ]
 
-# rosbridge and rosapi are third-party, so they can't publish to the status topic. They
-# matter just as much as our own nodes though, so find them in the node graph instead:
-# present means working, absent means they never came up or they died.
+# third-party, so they can't publish to the status topic. Found in the node graph
+# instead: present means working, absent means they never came up or they died.
 EXTERNAL_NODES = {
     "rosbridge_websocket": "rosbridge",
     "rosapi": "rosapi",
@@ -40,10 +38,10 @@ EXTERNAL_NODES = {
 
 CHECK_PERIOD_SEC = 1.0
 
-# A node republishes every second, so three missed reports means it stopped.
+# a node republishes every second, so three missed reports means it stopped
 STALE_AFTER_SEC = 3.0
 
-# How long to wait for every node to check in before printing the summary anyway.
+# how long to wait for everyone to check in before summarising anyway
 STARTUP_GRACE_SEC = 15.0
 
 STALE = "stale"
@@ -51,9 +49,7 @@ MISSING = "not reporting"
 
 
 def _labelColor(label: str) -> ColorCodes:
-    """
-    The console color for a display label, treating stale and missing as failures.
-    """
+    # stale and missing count as failures
     if label == STATE_NAMES[NodeStatus.OK]:
         return ColorCodes.GREEN_OK
     if label == STATE_NAMES[NodeStatus.DEGRADED]:
@@ -65,18 +61,11 @@ def _labelColor(label: str) -> ColorCodes:
 
 @dataclass
 class NodeRecord:
-    """
-    The latest report from one node, plus when it arrived.
-    """
-
     state: int
     detail: str
     last_seen: float
 
     def label(self, now: float) -> str:
-        """
-        The state to display, accounting for reports having stopped arriving.
-        """
         if now - self.last_seen > STALE_AFTER_SEC:
             return STALE
         return STATE_NAMES.get(self.state, "unknown")
@@ -104,17 +93,11 @@ class Supervisor(Node):
         self.get_logger().info(f"watching {len(self._expected)} modules")
 
     def statusCallback(self, msg: NodeStatus) -> None:
-        """
-        Records a report from one node.
-        """
         self._records[msg.name] = NodeRecord(
             state=msg.state, detail=msg.detail, last_seen=time.monotonic()
         )
 
     def check(self) -> None:
-        """
-        Prints the startup summary once, then reports only state changes.
-        """
         now = time.monotonic()
         self._pollExternalNodes(now)
 
@@ -130,13 +113,7 @@ class Supervisor(Node):
 
         self._reportChanges(now)
 
-    # ***************
-    # Private helper methods
-    # ***************
     def _pollExternalNodes(self, now: float) -> None:
-        """
-        Records the third-party nodes as present or not by looking at the node graph.
-        """
         discovered = set(self.get_node_names())
 
         for node_name, label in EXTERNAL_NODES.items():
@@ -146,9 +123,6 @@ class Supervisor(Node):
                 )
 
     def _currentLabels(self, now: float) -> dict[str, str]:
-        """
-        The display state of every expected node, including ones that never reported.
-        """
         labels = {}
         for name in self._expected:
             record = self._records.get(name)
@@ -156,14 +130,8 @@ class Supervisor(Node):
         return labels
 
     def _printSummary(self, now: float) -> None:
-        """
-        Logs one line saying whether the rover came up.
-
-        This used to print a block with a line per module. The dashboard shows that table
-        continuously and keeps it current, so repeating it in the log was the same
-        information twice, once in the place where it goes stale. What the log is for is
-        the moment readiness was decided, and what was wrong if it wasn't.
-        """
+        # one line, not a table per module: the dashboard shows that continuously and
+        # keeps it current, so the log's job is the moment readiness was decided
         labels = self._currentLabels(now)
         ready = [name for name, label in labels.items() if label == STATE_NAMES[NodeStatus.OK]]
 
@@ -181,9 +149,6 @@ class Supervisor(Node):
         )
 
     def _reportChanges(self, now: float) -> None:
-        """
-        Logs a line for each module whose state changed since the last check.
-        """
         current = self._currentLabels(now)
 
         for name, label in current.items():
