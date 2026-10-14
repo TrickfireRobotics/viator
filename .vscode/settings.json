@@ -22,9 +22,13 @@
         }
     },
     "shfmt.executablePath": "/usr/local/bin/shfmt",
+    "shfmt.executableArgs": ["-i", "4", "-s"],
     "[shellscript]": {
         "editor.defaultFormatter": "mkhl.shfmt",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.detectIndentation": false,
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4
     },
     "[mdx]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
