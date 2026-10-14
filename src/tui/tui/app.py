@@ -1,8 +1,8 @@
 """
-The Viator dashboard: module status on top, live log and CAN traffic underneath.
+The Viator tui: module status on top, live log and CAN traffic underneath.
 
 The log follows the launch-output file as well as /rosout, so startup output, tracebacks
-and native-library warnings are there even when the dashboard opens late.
+and native-library warnings are there even when the tui opens late.
 """
 
 import base64
@@ -154,7 +154,7 @@ def shortNodeName(name: str) -> str:
 class ViatorTui(App[None]):
     TITLE = "viator"
 
-    # the one theme whose colours are the terminal's own, so the dashboard sits in the
+    # the one theme whose colours are the terminal's own, so the tui sits in the
     # operator's terminal rather than painting over it
     THEME = "ansi-dark"
 

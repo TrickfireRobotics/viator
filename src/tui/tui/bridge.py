@@ -1,5 +1,5 @@
 """
-The ROS side of the dashboard: a read-only observer, not launched with the rover.
+The ROS side of the tui: a read-only observer, not launched with the rover.
 
 rclpy and Textual each want to own an event loop, so the executor spins on its own
 thread and hands results over through plain callables. The app wraps those in

@@ -1,5 +1,5 @@
 """
-Drives the dashboard headlessly through Textual's pilot.
+Drives the tui headlessly through Textual's pilot.
 
 The UI is the one part of this repo that can be meaningfully tested off the rover: no CAN
 bus, no cameras, no motors. These run inside the dev container, where ROS and textual are
@@ -168,7 +168,7 @@ async def test_panes_mount():
 @asyncTest
 async def test_nothing_paints_a_background_over_the_terminal():
     """
-    The dashboard is meant to sit in the operator's terminal, not on top of it, so a
+    The tui is meant to sit in the operator's terminal, not on top of it, so a
     widget that paints an opaque surface is a regression.
     """
     app = ViatorTui()

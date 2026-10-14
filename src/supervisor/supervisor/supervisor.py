@@ -130,7 +130,7 @@ class Supervisor(Node):
         return labels
 
     def _printSummary(self, now: float) -> None:
-        # one line, not a table per module: the dashboard shows that continuously and
+        # one line, not a table per module: the tui shows that continuously and
         # keeps it current, so the log's job is the moment readiness was decided
         labels = self._currentLabels(now)
         ready = [name for name, label in labels.items() if label == STATE_NAMES[NodeStatus.OK]]

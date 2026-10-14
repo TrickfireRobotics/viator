@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make launch: bring the rover up and leave you in the dashboard.
+# make launch: bring the rover up and leave you in the tui.
 #
 # usage: ./launch.sh [-n] [-c] [-s] [-B] [-v]
 
@@ -103,12 +103,12 @@ hostSide() {
         runStep "colcon build" inside ./scripts/build.sh || die "the workspace didn't build"
     fi
 
-    # hand over rather than wrap: the dashboard needs this terminal
+    # hand over rather than wrap: the tui needs this terminal
     section "rover"
     delegateToContainer ./scripts/launch.sh
 }
 
-# the node graph, then the dashboard on top of it
+# the node graph, then the tui on top of it
 owns_graph=false
 graph_pid=""
 cleaned_up=false
@@ -161,7 +161,7 @@ containerSide() {
 
     if [ -n "$existing" ]; then
         ok "already running as pid ${existing}, attaching"
-        note "quitting the dashboard will leave it running"
+        note "quitting the tui will leave it running"
     else
         mkdir -p "$LAUNCH_LOG_DIR"
         : >"$LAUNCH_LOG"
@@ -171,7 +171,7 @@ containerSide() {
         owns_graph=true
 
         # a graph that is going to die on startup does it in a second or two, and an
-        # empty dashboard is a terrible way to find that out
+        # empty tui is a terrible way to find that out
         sleep "$STARTUP_GRACE_SEC"
 
         if ! kill -0 "$graph_pid" 2>/dev/null; then
@@ -194,9 +194,9 @@ containerSide() {
         ok "running as pid ${graph_pid}"
     fi
 
-    section "dashboard"
+    section "tui"
 
-    # no terminal means no dashboard, which is what a pipe or CI gets
+    # no terminal means no tui, which is what a pipe or CI gets
     if [ ! -t 1 ]; then
         note "no terminal, streaming the log instead"
         tail -f -n +1 "$LAUNCH_LOG" &

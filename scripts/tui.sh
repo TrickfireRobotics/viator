@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# make tui: just launch dashboard, expect rover code already running
+# make tui: just launch tui, expect rover code already running
 
 set -uo pipefail
 

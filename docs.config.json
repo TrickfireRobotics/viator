@@ -6,7 +6,7 @@
     "sidebar": [
         { "label": "Getting Started", "slug": "getting-started" },
         { "label": "Launching the Rover", "slug": "launching" },
-        { "label": "The Dashboard", "slug": "dashboard" },
+        { "label": "The TUI", "slug": "tui" },
         { "label": "Architecture", "slug": "architecture" },
         { "label": "Viator Orin", "slug": "orin" }
     ]
