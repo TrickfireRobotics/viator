@@ -18,7 +18,7 @@ launch: ## main launch method
 tui: ## open tui with launch already running
 	@./scripts/tui.sh
 
-raw: ## launch with no tui
+raw: ## legacy ROS only launch with no tui
 	@./scripts/raw.sh
 
 # --- the rover's CAN bus ---
