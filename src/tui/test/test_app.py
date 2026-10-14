@@ -1,0 +1,344 @@
+"""
+Drives the tui headlessly through Textual's pilot.
+
+The UI is the one part of this repo that can be meaningfully tested off the rover: no CAN
+bus, no cameras, no motors. These run inside the dev container, where ROS and textual are
+both present, and skip anywhere they aren't.
+"""
+
+import asyncio
+import functools
+import threading
+import time
+from collections.abc import Callable, Coroutine
+from typing import Any
+
+import pytest
+
+pytest.importorskip("textual", reason="textual is only installed in the dev container")
+pytest.importorskip("rcl_interfaces", reason="needs a sourced ROS 2 environment")
+pytest.importorskip("custom_interfaces", reason="needs the workspace to be built")
+
+from textual.widgets import DataTable, Input, RichLog, Static
+
+from custom_interfaces.msg import NodeStatus
+from tui.app import ViatorTui, shortNodeName
+from tui.bridge import (
+    LEVEL_DEBUG,
+    LEVEL_ERROR,
+    LEVEL_INFO,
+    LEVEL_WARN,
+    CanFrame,
+    CanTail,
+    LaunchLogTail,
+    LogRecord,
+    StatusRecord,
+    parseLaunchLine,
+)
+
+LEVEL_NAMES = {LEVEL_DEBUG: "DEBUG", LEVEL_INFO: "INFO", LEVEL_WARN: "WARN", LEVEL_ERROR: "ERROR"}
+
+
+def asyncTest(fn: Callable[..., Coroutine[Any, Any, None]]) -> Callable[..., None]:
+    """
+    Runs an async test body in its own event loop.
+
+    Deliberately hand-rolled instead of using pytest-asyncio: installing that pulls in a
+    pytest new enough to drop the deprecated `path` hook argument, which breaks ROS's
+    launch_testing plugin and takes `colcon test` down with it. functools.wraps keeps the
+    signature intact so pytest still injects fixtures.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> None:
+        asyncio.run(fn(*args, **kwargs))
+
+    return wrapper
+
+
+@pytest.fixture(autouse=True)
+def _no_ros(monkeypatch):
+    """
+    Stops the app opening a real rclpy context; these tests feed records in directly.
+    """
+    import tui.app as app_mod
+
+    monkeypatch.setattr(app_mod.RosBridge, "start", lambda self: None)
+    monkeypatch.setattr(app_mod.RosBridge, "stop", lambda self: None)
+
+
+def makeLog(level: int, node: str, message: str) -> LogRecord:
+    return LogRecord(
+        level=level,
+        level_name=LEVEL_NAMES[level],
+        node=node,
+        message=message,
+        seconds=int(time.time()),
+        nanoseconds=0,
+    )
+
+
+def test_launch_lines_include_tracebacks_and_ros_levels():
+    error = parseLaunchLine("[ERROR] [can_rmdx8]: bus down\n")
+    traceback = parseLaunchLine("Traceback (most recent call last):\n")
+    warning = parseLaunchLine("[ WARN:0] OpenCV warning\n")
+
+    assert (error.level, error.node, error.message) == (LEVEL_ERROR, "can_rmdx8", "bus down")
+    assert (traceback.level, traceback.node, traceback.message) == (
+        LEVEL_ERROR,
+        "launch",
+        "Traceback (most recent call last):",
+    )
+    assert (warning.level, warning.level_name) == (LEVEL_WARN, "WARN")
+
+
+def test_launch_tail_replays_existing_output_and_follows_new_lines(tmp_path):
+    path = tmp_path / "launch.log"
+    path.write_text("[INFO] [launch]: starting\n")
+    records: list[LogRecord] = []
+    received = threading.Event()
+
+    def onLog(record: LogRecord) -> None:
+        records.append(record)
+        if len(records) == 2:
+            received.set()
+
+    tail = LaunchLogTail(path, onLog)
+    tail.start()
+    with path.open("a") as log:
+        log.write("[ERROR] [drivebase]: stopped\n")
+
+    assert received.wait(timeout=1.0)
+    tail.stop()
+    assert [(record.level, record.message) for record in records] == [
+        (LEVEL_INFO, "starting"),
+        (LEVEL_ERROR, "stopped"),
+    ]
+
+
+def test_launch_plumbing_is_demoted_to_debug():
+    """
+    The dozen identical bookkeeping lines at the top of every run are hidden by default,
+    but still there for anyone who cycles the level down to debug.
+    """
+    pid = parseLaunchLine("[INFO] [drivebase-1]: process started with pid [896]\n")
+    real = parseLaunchLine("[INFO] [drivebase]: awaiting commands\n")
+
+    assert pid.level == LEVEL_DEBUG
+    assert real.level == LEVEL_INFO
+
+
+def test_can_frames_parse_out_of_candump_output():
+    frames: list[CanFrame] = []
+    tail = CanTail("can0", frames.append, lambda _state: None)
+
+    class FakeProcess:
+        stdout = iter(
+            [
+                "  can0  155   [8]  00 01 A0 3F 00 00 00 12\n",
+                "  can0  15a   [4]  92 00 00 00\n",
+                "not a frame\n",
+            ]
+        )
+
+    tail._readFrames(FakeProcess())
+
+    assert [(f.can_id, f.dlc, f.data) for f in frames] == [
+        ("155", 8, "00 01 A0 3F 00 00 00 12"),
+        ("15A", 4, "92 00 00 00"),
+    ]
+
+
+def test_node_names_lose_their_ros_decoration():
+    assert shortNodeName("/can_rmdx8_node") == "can_rmdx8"
+    assert shortNodeName("camera") == "camera"
+    assert len(shortNodeName("a_very_long_node_name_indeed")) <= 16
+
+
+@asyncTest
+async def test_panes_mount():
+    app = ViatorTui()
+    async with app.run_test():
+        assert len(app.query_one("#status", DataTable).columns) == 3
+        assert app.query_one("#log", RichLog) is not None
+        assert app.query_one("#bus", RichLog) is not None
+        assert app.query_one("#search", Input) is not None
+
+
+@asyncTest
+async def test_nothing_paints_a_background_over_the_terminal():
+    """
+    The tui is meant to sit in the operator's terminal, not on top of it, so a
+    widget that paints an opaque surface is a regression.
+    """
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        opaque = [
+            widget
+            for widget in app.query("Header, Footer, DataTable, RichLog, Input, Vertical")
+            if widget.styles.background.a == 1
+        ]
+        assert opaque == []
+
+
+@asyncTest
+async def test_bus_pane_shows_frames_and_can_be_hidden():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._handleFrame(CanFrame("can0", "155", 8, "00 01 A0 3F 00 00 00 12"))
+        app._drainBus()
+        await pilot.pause()
+        assert app._bus_ids == {"155"}
+
+        await pilot.press("b")
+        await pilot.pause()
+        assert app.query_one("#bus-pane").has_class("hidden")
+
+
+@asyncTest
+async def test_bus_pane_coalesces_frames_but_counts_every_frame(monkeypatch):
+    app = ViatorTui()
+    async with app.run_test():
+        writes = []
+        pane = app.query_one("#bus", RichLog)
+        monkeypatch.setattr(pane, "write", writes.append)
+
+        app._handleFrame(CanFrame("can0", "155", 8, "old"))
+        app._handleFrame(CanFrame("can0", "15A", 8, "other"))
+        app._handleFrame(CanFrame("can0", "155", 8, "new"))
+        app._drainBus()
+
+        assert app._bus_count == 3
+        assert app._bus_ids == {"155", "15A"}
+        assert [str(frame) for frame in writes] == ["15A 8 other", "155 8 new"]
+
+
+@asyncTest
+async def test_status_rows_appear():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyStatus(StatusRecord("can_rmdx8", NodeStatus.DEGRADED, "6 motors, 284 drops"))
+        app._applyStatus(StatusRecord("heartbeat", NodeStatus.OK, "connected"))
+        await pilot.pause()
+        assert app.query_one("#status", DataTable).row_count == 2
+
+
+@asyncTest
+async def test_default_filter_hides_debug():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving"))
+        app._applyLog(makeLog(LEVEL_DEBUG, "camera", "created publisher"))
+        app._applyLog(makeLog(LEVEL_ERROR, "can_rmdx8", "bus down"))
+        await pilot.pause()
+
+        shown = [r.level for r in app._records if app._shouldShow(r)]
+        assert shown == [LEVEL_INFO, LEVEL_ERROR]
+
+
+@asyncTest
+async def test_pause_stops_autoscroll():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.press("p")
+        assert app._paused
+        assert not app.query_one("#log", RichLog).auto_scroll
+
+        await pilot.press("p")
+        assert not app._paused
+
+
+@asyncTest
+async def test_level_key_cycles():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        start = app._level_index
+        await pilot.press("f")
+        assert app._level_index == (start + 1) % 4
+
+
+@asyncTest
+async def test_search_toggles_and_clears():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        await pilot.press("slash")
+        await pilot.pause()
+        assert app.query_one("#search", Input).has_class("visible")
+
+        await pilot.press("escape")
+        await pilot.pause()
+        assert app._search == ""
+        assert not app.query_one("#search", Input).has_class("visible")
+
+
+@asyncTest
+async def test_help_opens_and_escape_closes_it():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        panel = app.query_one("#help", Static)
+        assert not panel.has_class("visible")
+
+        await pilot.press("question_mark")
+        await pilot.pause()
+        assert panel.has_class("visible")
+
+        # escape closes the help panel before it touches the filter
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not panel.has_class("visible")
+
+
+@asyncTest
+async def test_text_filter_narrows_log():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(LEVEL_INFO, "camera", "publishing video0"))
+        await pilot.pause()
+
+        app._search = "video"
+        app._redrawLog()
+
+        shown = [r for r in app._records if app._shouldShow(r)]
+        assert len(shown) == 1
+        assert shown[0].node == "camera"
+
+
+@asyncTest
+async def test_save_writes_only_visible_lines(tmp_path, monkeypatch):
+    import tui.app as app_mod
+
+    monkeypatch.setattr(app_mod, "SAVE_DIR", tmp_path / "out")
+
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyLog(makeLog(LEVEL_INFO, "drivebase", "driving forward"))
+        app._applyLog(makeLog(LEVEL_DEBUG, "camera", "created publisher"))
+        await pilot.pause()
+
+        await pilot.press("s")
+        await pilot.pause()
+
+        files = list((tmp_path / "out").glob("*.log"))
+        assert len(files) == 1
+
+        body = files[0].read_text()
+        assert "driving forward" in body
+        assert "created publisher" not in body
+
+
+@asyncTest
+async def test_module_goes_stale_when_reports_stop():
+    app = ViatorTui()
+    async with app.run_test() as pilot:
+        app._applyStatus(StatusRecord("arm", NodeStatus.OK, "mode disabled"))
+        await pilot.pause()
+
+        # backdate the last sighting past the stale threshold
+        app._status_seen["arm"] = time.monotonic() - 10.0
+        app._refreshStatus()
+        await pilot.pause()
+
+        cell = app.query_one("#status", DataTable).get_cell_at((0, 1))
+        assert str(cell) == "stale"

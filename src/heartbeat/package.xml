@@ -3,17 +3,15 @@
 <package format="3">
   <name>heartbeat</name>
   <version>0.0.0</version>
-  <description>Heartbeat Node Package</description>
-  <maintainer email="hongkng5@uw.edu">trickfire</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Monitors rover connectivity and stops the motors if it's lost</description>
+  <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
-  <test_depend>python3-pytest</test_depend>
+  <exec_depend>custom_interfaces</exec_depend>
+  <exec_depend>lib</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

@@ -1,13 +1,167 @@
 ---
 title: Launching the Rover
-description: Build, bring up CAN, and launch the full node graph.
+description: One command to bring Viator up - checks, container, build, node graph and tui.
 ---
 
-This walks through the full workflow for getting Viator's software running end to end: starting mission control on your own machine, connecting to the rover, bringing up the CAN bus, and launching the ROS 2 node graph. It assumes you've already done the one-time dev container setup from [Getting Started](./getting-started.mdx).
+Getting Viator running is one command. SSH into the rover, run `make launch`, and you end up looking at the [tui](./tui.mdx) with the rover running behind it.
+
+```bash title="Terminal"
+ssh trickfire@192.168.0.112
+cd ~/viator
+make launch
+```
+
+The rover builds from the source tree on its own disk, so `make sync` your changes over (or pull them on the rover) and relaunch.
+
+## What `make launch` does
+
+Every line it prints has the same three parts: how many seconds into the launch you are, which part of the rover the line is about, then what happened. It is `dmesg`'s layout, for `dmesg`'s reason - one flat stream of one-line facts is the thing you can actually skim when something is broken, and the clock tells you which step was slow without anyone having to time it:
+
+```text
+[   0.000] viator: bringing the rover up
+[   0.004] host: Jetson AGX Orin
+[   0.112] host: docker 28.3.1
+[   0.198] host: compose v2.33.0
+[   0.241] host: source main @ a1b2c3d, /home/trickfire/viator
+[   2.641] can0: bringup done in 2s
+[   5.903] docker: image viator:dev done in 3s
+[   7.118] docker: container viator done in 1s
+[  55.402] workspace: colcon build 12 packages in 48s
+[  56.731] graph: running as pid 487
+[  56.733] tui: opening, ? for keys, q to quit
+```
+
+That is a whole launch, eleven lines, no scrolling. The two slow parts of it - the image build and `colcon build` - are not silent while they run: each opens a six-line pane under its own line with the tail of its output, so you can watch a build move instead of watching a spinner.
+
+```text
+[   2.904] docker: image viator:dev ... 12s
+  #14 [ 7/19] RUN apt-get install -y --no-install-recommends can-utils
+  #14 11.84 Preparing to unpack .../can-utils_2021.08.0-1_arm64.deb ...
+  #14 11.92 Unpacking can-utils (2021.08.0-1) ...
+  #14 12.07 Setting up can-utils (2021.08.0-1) ...
+  #14 12.19 Processing triggers for man-db (2.10.2-1) ...
+  #14 DONE 12.3s
+```
+
+When the step finishes, the pane collapses and leaves its one line of result behind. When it fails, the output is what you need, so the last twenty-five lines stay on screen along with the path to the whole log:
+
+```text
+[  55.402] workspace: error: colcon build exited 2
+  --- stderr: drivebase
+  SyntaxError: invalid syntax
+[  55.404] workspace: full output in /tmp/viator-step.Xy3Kq1
+```
+
+Only two words ever get colour, `error:` and `warning:`, so the thing that went wrong is the thing that stands out.
+
+| Part        | Does                                                                             |
+| ----------- | -------------------------------------------------------------------------------- |
+| `host`      | Docker and compose are there and reachable, and which commit you're about to run |
+| `can0`      | The bus is up at 1 Mbit, and brings it up if it isn't                            |
+| `docker`    | Builds the `viator:dev` image if anything changed, and starts the container      |
+| `workspace` | `colcon build` inside the container                                              |
+| `graph`     | Starts the node graph                                                            |
+| `tui`       | Opens the tui on top of it                                                       |
+
+Then it hands you the tui. Press `?` in there for the keys, `q` to quit.
+
+<Callout type="info" title="It works from either side">
+    Run it on the rover's host and it does all five phases. Run it inside the dev container, where
+    the first four are already done, and it goes straight to the node graph and the tui. There
+    is nothing to remember about which terminal you are in.
+</Callout>
+
+<Callout type="warning" title="Quitting the tui stops the rover">
+    `make launch` owns the node graph it started, so `q` shuts it down, and so does losing your SSH
+    session. That is the right behaviour on a bench, where a dropped connection should stop the
+    motors rather than leave them holding a setpoint. To run the rover independently of your
+    terminal, use `make raw` and `make tui` as [two separate
+    commands](#running-it-without-the-tui).
+</Callout>
+
+## Skip the sudo prompt
+
+`make launch` brings `can0` up every time, and that needs root. Do this once per rover and it stops asking:
+
+```bash title="Terminal (on the rover)"
+make can-sudoers
+```
+
+That installs a `/etc/sudoers.d` rule letting your user run the three commands `scripts/can.sh` needs as root without a password. Re-run it if those binaries ever move.
+
+<Callout type="idea" title="make can-setup is still there">
+    `make launch` already does the bringup, so this is for a bus that dropped mid-session, or for
+    bringing it up without launching anything.
+</Callout>
+
+### Using a different interface
+
+The drivebase is on `can0`. Everything that touches the bus, including `can_rmdx8`, reads the interface from `CAN_IFACE`, so a bench setup wired differently only needs it set once:
+
+```bash title="Terminal"
+CAN_IFACE=can1 make launch
+```
+
+It is passed through into the container, so the scripts and the node always agree on which bus they are talking about.
+
+## Flags
+
+Pass these through `FLAGS=`:
+
+```bash title="Terminal"
+make launch FLAGS=-B      # skip the workspace build
+```
+
+| Flag | Does                                                                             |
+| ---- | -------------------------------------------------------------------------------- |
+| `-B` | Skip `colcon build`. Relaunch without recompiling                                |
+| `-v` | Stream the build output instead of collapsing it to one line                     |
+| `-n` | Rebuild the container image with no build cache                                  |
+| `-c` | Force recreate the container                                                     |
+| `-s` | Skip the CAN check. The graph will shut down when `can_rmdx8` can't open the bus |
+
+`-B` is the one you'll use most: once the workspace is built, `--symlink-install` means Python edits take effect without rebuilding, so relaunching is just the rover coming back up.
+
+## The other commands
+
+```bash title="Terminal"
+make            # list every target
+```
+
+| Command            | Does                                                        |
+| ------------------ | ----------------------------------------------------------- |
+| `make launch`      | Bring everything up and open the tui                        |
+| `make tui`         | Open the tui against a rover that is already running        |
+| `make raw`         | Run the node graph alone, in the foreground, no tui         |
+| `make build`       | Build the workspace                                         |
+| `make connect`     | Get a shell in the dev container                            |
+| `make can-setup`   | Bring the CAN bus up right now, by hand                     |
+| `make can-sudoers` | Let CAN bringup run without a sudo password. Once per rover |
+| `make sync`        | rsync this checkout to the rover (`IP=`, `REMOTE_PATH=`)    |
+
+`tui`, `raw` and `build` all work from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
+
+## Confirm it came up
+
+`make launch` leaves you in the tui, where every module should reach `ok` within a few seconds:
+
+```text
+╭─ modules ────────────────────────────────────────────────────────────╮
+│  module                     state     detail                        │
+│  ● arm                      ok        mode disabled                 │
+│  ● camera                   ok        2 cameras: [0, 1]             │
+│  ● can_rmdx8                ok        6 motors on can0              │
+│  ● drivebase                ok        awaiting commands             │
+│  ● heartbeat                ok        awaiting mission control      │
+│  ● mission_control_updater  ok                                      │
+│  ● rosapi                   ok        discovered                    │
+│  ● rosbridge                ok        discovered                    │
+╰──────────────────────────────────────────────────── 8/8 ok ─────────╯
+```
 
 ## Start mission control
 
-Mission control lives in its own repo, separate from `urc-2023`.
+Mission control lives in its own repo and runs on **your** machine, not the rover.
 
 <Steps>
     <Step>
@@ -15,7 +169,7 @@ Mission control lives in its own repo, separate from `urc-2023`.
         [mission-control](https://github.com/TrickfireRobotics/mission-control) and install its
         dependencies:
 
-        ```bash title="Terminal"
+        ```bash title="Terminal (your machine)"
         git clone https://github.com/TrickfireRobotics/mission-control.git
         cd mission-control
         npm install
@@ -24,95 +178,91 @@ Mission control lives in its own repo, separate from `urc-2023`.
     <Step>
         Start it:
 
-        ```bash title="Terminal"
+        ```bash title="Terminal (your machine)"
         npm run dev
         ```
     </Step>
     <Step>
-        Once it's open, go to the settings tab and point the websocket at the rover's address
-        (the same one you'll SSH into below). The connection indicator turns green once the
-        rover's `rosbridge_server` is up and reachable.
+        In the settings tab, point the websocket at the rover's address - the same one you SSH
+        into. The connection indicator turns green once the rover's `rosbridge_server` is up and
+        reachable.
     </Step>
 
 </Steps>
 
-<Callout type="info" title="Run this on your own machine">
-    Mission control is a plain Node/Vite project - run it on your host, not inside the `urc-2023`
-    dev container.
+<Callout type="success" title="The full chain is live">
+    Mission control's websocket indicator is green and every module in the tui is `ok`. Rover
+    hardware through to mission control.
 </Callout>
 
-## Connect to the rover
+## Running it without the tui
 
-```bash title="Terminal"
-ssh trickfire@192.168.0.112
-cd ~/urc-2023
-```
+Use this when you want the rover to outlive the terminal you are watching it from, or you want the raw launch output rather than the tui's rendering of it.
 
-## Bring up the CAN bus
+<Steps>
+    <Step>
+        In one terminal, run the graph in the foreground:
 
-Open a second terminal on the rover (SSH in again) and start watching the bus before you bring it up, so you can see traffic appear as soon as it's live:
+        ```bash title="Terminal 1"
+        make raw
+        ```
+    </Step>
+    <Step>
+        In another, attach the tui:
+
+        ```bash title="Terminal 2"
+        make tui
+        ```
+
+        This one only observes, so closing it or losing the connection leaves the rover running.
+    </Step>
+
+</Steps>
+
+`make raw` doesn't check CAN or build anything - it assumes `make launch` already did. If the bus isn't up, `make can-setup` brings it up on its own.
+
+## Watching the bus directly
+
+When you suspect the problem is below ROS, watch the raw CAN traffic:
 
 ```bash title="Terminal 2"
 candump any
 ```
 
-<Callout type="info">
-    Using `any` instead of a specific interface name means this keeps working no matter which CAN
-    line (`can0`, `can1`, ...) ends up carrying traffic. Leave it running; it'll pick up traffic as
-    soon as the interface comes up in the next step.
-</Callout>
-
-Back in the first terminal, bring the CAN interface up:
-
-```bash title="Terminal 1"
-make can-setup
-```
-
-This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
-
-## Build and launch
-
-<Steps>
-    <Step>
-        Build and attach to the rover's container:
-
-        ```bash title="Terminal 1"
-        make container
-        ```
-    </Step>
-    <Step>
-        Inside the container, build the ROS 2 workspace:
-
-        ```bash title="Terminal 1 (in container)"
-        make build
-        ```
-    </Step>
-    <Step>
-        Launch the full node graph:
-
-        ```bash title="Terminal 1 (in container)"
-        make launch
-        ```
-    </Step>
-
-</Steps>
-
-<Callout type="success" title="It's working">
-    `candump` should now show a steady stream of CAN traffic, and mission control's websocket
-    indicator should be green - the full chain from rover hardware to mission control is live.
-</Callout>
-
-<Callout type="idea" title="Reconnecting later">
-    Once the container exists, `make connect` re-attaches to it without rebuilding - use that
-    instead of `make container` for subsequent sessions.
-</Callout>
+`any` rather than a specific interface means this keeps working no matter which CAN line ends up carrying traffic, and it picks up traffic as soon as the interface comes up.
 
 <Accordions>
-    <Accordion title="candump shows no traffic">
-        The CAN interface hasn't been brought up yet - run `make can-setup` first.
+    <Accordion title="make launch asks for sudo every time">
+        It brings `can0` up on every launch, which needs root. `make can-sudoers` installs the rule
+        that lets it happen without a password.
+    </Accordion>
+    <Accordion title="can0: interface not present">
+        There is no CAN hardware on this host, or the transceiver isn't powered. On the Orin, check
+        the harness at the expansion header (see [Viator Orin](./orin.mdx)) and `dmesg` for the
+        `mttcan` driver. On a laptop this is expected - the rover needs real hardware to run.
+    </Accordion>
+    <Accordion title="The node graph shut itself down during startup">
+        A node that commands motors failed, and the launch file takes the whole graph down when that
+        happens so the motors stop rather than holding their last setpoint. `make launch` prints the
+        first error it finds; the full output is in `log/launch-latest.log`.
+    </Accordion>
+    <Accordion title="The build failed and I can't see why">
+        Re-run with `make launch FLAGS=-v` to stream the build instead of collapsing it. On a
+        failure the path to the full captured output is printed too.
     </Accordion>
     <Accordion title="Mission control's websocket indicator stays red">
-        Double check the websocket address in mission control's settings matches the rover's current
-        IP, and that `make launch` is actually running (it's what starts `rosbridge_server`).
+        Check the address in mission control's settings matches the rover's current IP, and that
+        `rosbridge` is `ok` in the tui. If it isn't, the graph isn't running.
+    </Accordion>
+    <Accordion title="candump shows no traffic">
+        The bus isn't up, or nothing is driving it. `ip -details link show can0` tells you which:
+        the tui's bus pane stays empty either way.
+    </Accordion>
+    <Accordion title="Permission denied talking to Docker">
+        Your user isn't in the `docker` group. `sudo usermod -aG docker $USER`, then log out and
+        back in.
+    </Accordion>
+    <Accordion title="A module shows degraded or stale">
+        See [the tui page](./tui.mdx) - it covers every state and what to do about it.
     </Accordion>
 </Accordions>

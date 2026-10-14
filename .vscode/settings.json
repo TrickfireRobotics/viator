@@ -1,11 +1,15 @@
 {
     "editor.rulers": [100],
     "files.associations": {
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "*.sudoers": "plaintext"
     },
     "files.exclude": {
+        "**/node_modules": true,
         "**/.mypy_cache": true,
-        "**/.ruff_cache": true
+        "**/.ruff_cache": true,
+        "**/.pytest_cache": true,
+        "**/__pycache__": true
     },
 
     /* ------------------------------- formatting ------------------------------- */
@@ -18,9 +22,13 @@
         }
     },
     "shfmt.executablePath": "/usr/local/bin/shfmt",
+    "shfmt.executableArgs": ["-i", "4", "-s"],
     "[shellscript]": {
         "editor.defaultFormatter": "mkhl.shfmt",
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
+        "editor.detectIndentation": false,
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4
     },
     "[mdx]": {
         "editor.defaultFormatter": "esbenp.prettier-vscode",
@@ -40,12 +48,12 @@
     "python.autoComplete.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "./src",
-        "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
     "python.analysis.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
         "./src",
-        "/home/trickfire/urc-2023/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
 
     "python.analysis.diagnosticSeverityOverrides": {

@@ -18,8 +18,7 @@ setup(
     # Zip-safety is not yet confirmed.
     zip_safe=True,
     maintainer="trickfire",
-    maintainer_email="phillipov@outlook.com",
-    description="TODO: Package description",
-    license="TODO: License declaration",
-    tests_require=["pytest"],
+    maintainer_email="tfrbtcs@uw.edu",
+    description="Launch files for starting the Viator rover",
+    license="Apache-2.0",
 )

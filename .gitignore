@@ -6,6 +6,11 @@
 # python
 __pycache__/
 
+# tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # zed
 src/zed-ros2-examples/
 src/zed-ros2-wrapper/

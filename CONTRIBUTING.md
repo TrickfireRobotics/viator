@@ -2,10 +2,9 @@
 
 ## Development Environment
 
-Development happens inside the provided devcontainer. Open the repo in VS Code with the
-[Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers)
-installed, then choose **Reopen in Container** when prompted. This ensures everyone builds
-and runs the project with the same tools and dependencies.
+For editor integration, open the repo in VS Code with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) installed and choose **Reopen in Container** when prompted. Either way you get the same ROS 2 Humble environment everyone else builds and runs against.
+
+See [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) for the full workflow.
 
 ## Code Style
 
@@ -16,6 +15,9 @@ and runs the project with the same tools and dependencies.
 - Run `make format` before committing, or let your editor format on save
 - Keep changes consistent with the formatting these tools apply — don't hand-format
   differently from what they produce
+
+Run `make hooks` once after cloning to install the pre-commit hooks that enforce this
+automatically at commit time.
 
 ## Commits & PRs
 

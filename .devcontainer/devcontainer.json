@@ -1,8 +1,8 @@
 {
     "dockerComposeFile": "docker-compose.yml",
     "service": "viator",
-    "workspaceFolder": "/home/trickfire/urc-2023",
-    "postCreateCommand": "pre-commit install",
+    "workspaceFolder": "/home/trickfire/viator",
+    "postCreateCommand": "make hooks",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -11,8 +11,10 @@
                 "ms-python.mypy-type-checker",
                 "charliermarsh.ruff",
                 "mkhl.shfmt",
+                "mads-hartmann.bash-ide-vscode",
                 "esbenp.prettier-vscode",
-                "unifiedjs.vscode-mdx"
+                "unifiedjs.vscode-mdx",
+                "ms-vscode.cmake-tools"
             ]
         }
     }

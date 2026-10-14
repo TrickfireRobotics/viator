@@ -1,14 +1,13 @@
 # Ubuntu 22.04 with ROS 2 Humble
-FROM ros:humble AS viator
+FROM ros:humble-ros-base-jammy AS base
 
 # ---- system packages ----
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install --no-install-recommends -y \
-    git \
     python3-pip \
-    ssh-client \
     ros-humble-rosbridge-server \
+    ros-humble-rosapi \
     usbutils \
     can-utils \
     iproute2 \
@@ -17,30 +16,28 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     python3-numpy \
     libboost-python-dev \
     libopencv-dev \
-    python3-opencv
+    python3-opencv \
+    ros-humble-cv-bridge
+
+RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
+    && echo "/opt/ros/$ROS_DISTRO/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)" >> /etc/ld.so.conf.d/ros2.conf \
+    && ldconfig
 
 RUN pip3 install --no-cache-dir \
+    "numpy<2" \
     moteus \
+    "textual>=8,<9" \
     pyusb \
     pybind11 \
-    pybind11-stubgen \
-    "pydocstyle>=6.3.0"
+    pybind11-stubgen
 
-# ---- dev tooling ----
+# ---- myactuator_rmd for RMD-X8 motors ----
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y nodejs
+    # https://github.com/2b-t/myactuator_rmd/commit/c43980cac5948cfd4974a96b86fbac0a80749ed6
+ARG MYACTUATOR_RMD_SHA=c43980cac5948cfd4974a96b86fbac0a80749ed6
 
-RUN pip3 install --no-cache-dir ruff mypy pre-commit \
-    && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
-    -o /usr/local/bin/shfmt \
-    && chmod +x /usr/local/bin/shfmt
-
-# ---- myactuator_rmd (RMD-X8 motor driver) ----
-
-RUN git clone --depth 1 https://github.com/2b-t/myactuator_rmd.git /tmp/myactuator_rmd \
+RUN git clone https://github.com/2b-t/myactuator_rmd.git /tmp/myactuator_rmd \
+    && git -C /tmp/myactuator_rmd checkout "$MYACTUATOR_RMD_SHA" \
     && cmake -S /tmp/myactuator_rmd -B /tmp/myactuator_rmd/build -D PYTHON_BINDINGS=on \
     && cmake --build /tmp/myactuator_rmd/build -j "$(nproc)" \
     && cmake --install /tmp/myactuator_rmd/build \
@@ -55,14 +52,30 @@ RUN useradd trickfire --shell /bin/bash --create-home --no-log-init -G video,sud
     && touch /home/trickfire/.sudo_as_admin_successful \
     && chown trickfire:trickfire /home/trickfire/.sudo_as_admin_successful
 
-# trickfire is non-root, but SocketCAN raw sockets (candump/cansend and the RMD-X8
-# node's CanDriver) need CAP_NET_RAW/CAP_NET_ADMIN, which a non-root exec doesn't get
-# just from the container's `cap_add`/`privileged` settings. Grant NOPASSWD sudo for
-# only the specific CAN tooling and the built can_rmdx8 node so this works without an
-# interactive password, without handing trickfire unrestricted root.
-COPY .devcontainer/trickfire-can-sudoers /etc/sudoers.d/trickfire-can
+# non-sudo permissions to run can control related commands
+COPY .devcontainer/trickfire-can.sudoers /etc/sudoers.d/trickfire-can
 RUN chmod 0440 /etc/sudoers.d/trickfire-can && visudo -cf /etc/sudoers.d/trickfire-can
 
+# ---- dev ----
+FROM base AS dev
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install --no-install-recommends -y \
+    ssh-client \
+    && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y nodejs
+
+RUN pip3 install --no-cache-dir \
+    ruff \
+    mypy \
+    pre-commit \
+    && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
+    -o /usr/local/bin/shfmt \
+    && chmod +x /usr/local/bin/shfmt
+
 COPY .devcontainer/trickfire.bashrc /home/trickfire/.bashrc
+
+ENV VIATOR_CONTAINER=dev
 
 USER trickfire

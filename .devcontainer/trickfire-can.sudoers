@@ -1,0 +1,1 @@
+trickfire ALL=(root) NOPASSWD: /usr/sbin/ip, /usr/sbin/modprobe, /usr/bin/candump, /usr/bin/cansend, /usr/bin/cangen, /usr/bin/cansniffer

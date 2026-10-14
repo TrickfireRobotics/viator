@@ -1,13 +1,14 @@
 import json
+from typing import Any
 
-from lib.motor_state.moteus_motor_state import MoteusMotorState
+from lib.motor_state.can_motor_state import CANMotorState
 
 
 class InfoToJSONHelper:
     def __init__(self) -> None:
-        self.moteus_entries: list[MoteusMotorState] = []
+        self.moteus_entries: list[CANMotorState[Any]] = []
 
-    def addMoteusEntry(self, entry: MoteusMotorState) -> None:
+    def addMoteusEntry(self, entry: CANMotorState[Any]) -> None:
         self.moteus_entries.append(entry)
 
     def buildJSONString(self) -> str:

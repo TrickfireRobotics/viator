@@ -1,0 +1,178 @@
+"""
+Turns the reports on `/viator/node_status` into one answer to "is the rover ready".
+
+Says ready or not once the expected nodes have checked in, then only speaks up when
+something changes state. Without it, judging readiness meant scrolling a launch log and
+knowing which lines were load-bearing.
+"""
+
+import time
+from dataclasses import dataclass
+
+from rclpy.node import Node
+
+from custom_interfaces.msg import NodeStatus
+from lib.color_codes import ColorCodes, colorStr
+from lib.node_runner import runNodes
+from lib.status import STATE_NAMES, STATUS_TOPIC
+
+# overridable with the `expected_nodes` parameter, so a partial bringup for bench testing
+# doesn't report false failures
+DEFAULT_EXPECTED_NODES = [
+    "drivebase",
+    "can_rmdx8",
+    "mission_control_updater",
+    "arm",
+    "heartbeat",
+    "camera",
+    "rosbridge",
+    "rosapi",
+]
+
+# third-party, so they can't publish to the status topic. Found in the node graph
+# instead: present means working, absent means they never came up or they died.
+EXTERNAL_NODES = {
+    "rosbridge_websocket": "rosbridge",
+    "rosapi": "rosapi",
+}
+
+CHECK_PERIOD_SEC = 1.0
+
+# a node republishes every second, so three missed reports means it stopped
+STALE_AFTER_SEC = 3.0
+
+# how long to wait for everyone to check in before summarising anyway
+STARTUP_GRACE_SEC = 15.0
+
+STALE = "stale"
+MISSING = "not reporting"
+
+
+def _labelColor(label: str) -> ColorCodes:
+    # stale and missing count as failures
+    if label == STATE_NAMES[NodeStatus.OK]:
+        return ColorCodes.GREEN_OK
+    if label == STATE_NAMES[NodeStatus.DEGRADED]:
+        return ColorCodes.WARNING_YELLOW
+    if label == STATE_NAMES[NodeStatus.STARTING]:
+        return ColorCodes.CYAN_OK
+    return ColorCodes.FAIL_RED
+
+
+@dataclass
+class NodeRecord:
+    state: int
+    detail: str
+    last_seen: float
+
+    def label(self, now: float) -> str:
+        if now - self.last_seen > STALE_AFTER_SEC:
+            return STALE
+        return STATE_NAMES.get(self.state, "unknown")
+
+
+class Supervisor(Node):
+    def __init__(self) -> None:
+        super().__init__("supervisor")
+
+        self.declare_parameter("expected_nodes", DEFAULT_EXPECTED_NODES)
+        self._expected: list[str] = list(
+            self.get_parameter("expected_nodes").get_parameter_value().string_array_value
+        )
+
+        self._records: dict[str, NodeRecord] = {}
+        self._reported_labels: dict[str, str] = {}
+        self._started_at = time.monotonic()
+        self._summary_printed = False
+
+        self._subscription = self.create_subscription(
+            NodeStatus, STATUS_TOPIC, self.statusCallback, 10
+        )
+        self._timer = self.create_timer(CHECK_PERIOD_SEC, self.check)
+
+        self.get_logger().info(f"watching {len(self._expected)} modules")
+
+    def statusCallback(self, msg: NodeStatus) -> None:
+        self._records[msg.name] = NodeRecord(
+            state=msg.state, detail=msg.detail, last_seen=time.monotonic()
+        )
+
+    def check(self) -> None:
+        now = time.monotonic()
+        self._pollExternalNodes(now)
+
+        if not self._summary_printed:
+            everyone_reported = all(name in self._records for name in self._expected)
+            out_of_time = now - self._started_at > STARTUP_GRACE_SEC
+
+            if everyone_reported or out_of_time:
+                self._printSummary(now)
+                self._summary_printed = True
+                self._reported_labels = self._currentLabels(now)
+            return
+
+        self._reportChanges(now)
+
+    def _pollExternalNodes(self, now: float) -> None:
+        discovered = set(self.get_node_names())
+
+        for node_name, label in EXTERNAL_NODES.items():
+            if node_name in discovered:
+                self._records[label] = NodeRecord(
+                    state=NodeStatus.OK, detail="discovered", last_seen=now
+                )
+
+    def _currentLabels(self, now: float) -> dict[str, str]:
+        labels = {}
+        for name in self._expected:
+            record = self._records.get(name)
+            labels[name] = MISSING if record is None else record.label(now)
+        return labels
+
+    def _printSummary(self, now: float) -> None:
+        # one line, not a table per module: the tui shows that continuously and
+        # keeps it current, so the log's job is the moment readiness was decided
+        labels = self._currentLabels(now)
+        ready = [name for name, label in labels.items() if label == STATE_NAMES[NodeStatus.OK]]
+
+        if len(ready) == len(labels):
+            self.get_logger().info(
+                colorStr(f"all {len(labels)} modules ready", ColorCodes.GREEN_OK)
+            )
+            return
+
+        problems = ", ".join(
+            f"{name} {label}" for name, label in labels.items() if name not in ready
+        )
+        self.get_logger().error(
+            colorStr(f"{len(ready)}/{len(labels)} modules ready - {problems}", ColorCodes.FAIL_RED)
+        )
+
+    def _reportChanges(self, now: float) -> None:
+        current = self._currentLabels(now)
+
+        for name, label in current.items():
+            if label == self._reported_labels.get(name):
+                continue
+
+            record = self._records.get(name)
+            detail = record.detail if record is not None else ""
+            message = f"{name}: {label}" + (f" ({detail})" if detail else "")
+
+            colored = colorStr(message, _labelColor(label))
+            if label == STATE_NAMES[NodeStatus.OK]:
+                self.get_logger().info(colored)
+            elif label == STATE_NAMES[NodeStatus.DEGRADED]:
+                self.get_logger().warning(colored)
+            else:
+                self.get_logger().error(colored)
+
+        self._reported_labels = current
+
+
+def main(args: list[str] | None = None) -> None:
+    runNodes(Supervisor, args=args)
+
+
+if __name__ == "__main__":
+    main()

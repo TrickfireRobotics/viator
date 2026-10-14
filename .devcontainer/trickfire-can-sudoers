@@ -1,3 +1,0 @@
-Defaults!/home/trickfire/urc-2023/install/can_rmdx8/lib/can_rmdx8/can_rmdx8 !env_reset, env_delete-="PYTHONPATH"
-
-trickfire ALL=(root) NOPASSWD: /usr/sbin/ip, /usr/sbin/modprobe, /usr/bin/candump, /usr/bin/cansend, /usr/bin/cangen, /usr/bin/cansniffer, /home/trickfire/urc-2023/install/can_rmdx8/lib/can_rmdx8/can_rmdx8

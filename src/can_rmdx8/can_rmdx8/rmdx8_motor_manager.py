@@ -1,19 +1,22 @@
+import os
 import sys
 from collections import deque
+from collections.abc import Sequence
 from threading import Lock
 
 import myactuator_rmd_py as rmd
-import rclpy
 import std_msgs.msg
 from rclpy.callback_groups import ReentrantCallbackGroup
-from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
+from rclpy.executors import Executor, MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.subscription import Subscription
 from std_msgs.msg import String
 
-from lib.color_codes import ColorCodes, colorStr
 from lib.configs import MotorConfigs, RMDx8MotorConfig
+from lib.node_runner import runNodes
+from lib.status import StatusReporter
 
+from .can_health import CanHealth
 from .rmdx8_motor import RMDx8Motor
 
 
@@ -22,20 +25,30 @@ class RMDx8MotorManager(Node):
     Class to manage the control and storage of RMDx8 motors in the ROS system.
     """
 
-    # String identifier for updating motor state
     _UPDATE_STATE = "UPDATE_STATE"
+
+    # the scripts export CAN_IFACE into the container, so setting it there moves the whole
+    # stack to another bus
+    _DEFAULT_CAN_IFACE = "can0"
 
     def __init__(self) -> None:
         super().__init__("can_rmdx8_node")
-        self.get_logger().info(colorStr("Launching can_rmdx8 node", ColorCodes.BLUE_OK))
         self._id_to_rmdx8_motor: dict[int, RMDx8Motor] = {}
-        self.driver = rmd.CanDriver("can1")
+        self._can_iface = os.environ.get("CAN_IFACE") or self._DEFAULT_CAN_IFACE
+        self.driver = rmd.CanDriver(self._can_iface)
         self._driver_lock = Lock()
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
+        self.health = CanHealth(self)
         self.createRMDx8Motors()
         # Hardware testing
         self.create_timer(0.005, self._handleRequests)
+
+        self._status = StatusReporter(self, "can_rmdx8")
+        summary = f"{self.motorCount()} motors on {self._can_iface}"
+        self._status.ok(summary)
+        self.health.setStatusReporter(self._status, summary)
+        self.get_logger().info(f"can_rmdx8 ready, {summary}")
 
     def _createSubscriber(self, config: RMDx8MotorConfig) -> Subscription:
         can_id = config.can_id
@@ -68,6 +81,7 @@ class RMDx8MotorManager(Node):
             self,
             lambda: self._createRequest(config.can_id, String(data=self._UPDATE_STATE)),
             self._driver_lock,
+            self.health,
         )
         self._id_to_rmdx8_motor[config.can_id] = motor
         self._createSubscriber(config)
@@ -113,37 +127,28 @@ class RMDx8MotorManager(Node):
         return len(self._id_to_rmdx8_motor)
 
 
-# Main function
-def main(args: list[str] | None = None) -> None:
-    """
-    The entry point for RMDx8
-    """
+def _buildExecutor(nodes: Sequence[Node]) -> Executor:
+    # each motor has a timer and a subscriber callback that can run at the same time, so
+    # 2 threads per motor, and at least 4 or spin_once crashes
+    manager = nodes[0]
+    assert isinstance(manager, RMDx8MotorManager)
+    return MultiThreadedExecutor(num_threads=max(2 * manager.motorCount() + 2, 4))
 
-    rclpy.init(args=args)
-    node = None
-    try:
-        node = RMDx8MotorManager()
-        # Each motor has a timer + subscriber callback that can run concurrently,
-        # so allocate 2 threads per motor with a minimum of 2 to avoid spin_once crashes.
-        num_threads = max(2 * node.motorCount() + 2, 4)
-        executor = MultiThreadedExecutor(num_threads=num_threads)
-        executor.add_node(node)
-        executor.spin()
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        pass
-    finally:
-        if node is not None:
+
+def _stopMotors(nodes: Sequence[Node]) -> None:
+    for node in nodes:
+        if isinstance(node, RMDx8MotorManager):
             node.shutdownMotors()
-        # rclpy's own SIGINT handler may have already shut the context down
-        # by the time we get here, so calling shutdown() unconditionally
-        # raises RCLError("rcl_shutdown already called") and makes every
-        # Ctrl-C look like a crash.
-        if rclpy.ok():
-            rclpy.shutdown()
 
 
-# If script is run directly, then create a RMDx8MotorManager object and run the main function
+def main(args: list[str] | None = None) -> None:
+    runNodes(
+        RMDx8MotorManager,
+        args=args,
+        executor_factory=_buildExecutor,
+        on_shutdown=_stopMotors,
+    )
+
+
 if __name__ == "__main__":
     main(sys.argv)
