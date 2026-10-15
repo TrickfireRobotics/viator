@@ -7,18 +7,13 @@ from launch_ros.actions import Node
 from launch_xml.launch_description_sources import XMLLaunchDescriptionSource
 
 can_moteus_node = Node(package="can_moteus", executable="can_moteus", name="can_moteus_node")
-
-
 drivebase_node = Node(package="drivebase", executable="drivebase", name="drivebase_node")
 
-# Runs as root via sudo: opening the raw CAN socket for can1 needs CAP_NET_RAW/NET_ADMIN,
-# which the non-root trickfire user doesn't have (see .devcontainer/trickfire-can-sudoers).
-can_rmdx8_node = Node(
-    package="can_rmdx8",
-    executable="can_rmdx8",
-    name="can_rmdx8_node",
-    prefix="sudo -n --",
-)
+# must stay non-root like every other node here: FastDDS falls back to shared memory for
+# same-host traffic and those /dev/shm segments are 0644, so a root node and a trickfire
+# node discover each other but silently exchange no data. AF_CAN raw sockets don't need
+# CAP_NET_RAW anyway (unlike AF_INET), only bringing the link up does
+can_rmdx8_node = Node(package="can_rmdx8", executable="can_rmdx8", name="can_rmdx8_node")
 
 mission_control_updater_node = Node(
     package="mission_control_updater",
@@ -54,7 +49,7 @@ launch_include = IncludeLaunchDescription(
 def generate_launch_description() -> launch.LaunchDescription:  # pylint: disable=invalid-name
     return launch.LaunchDescription(
         [
-            can_moteus_node,
+            # can_moteus_node, (dsabeled for now cause arm is not implemented)
             drivebase_node,
             can_rmdx8_node,
             mission_control_updater_node,

@@ -7,7 +7,7 @@ This walks through the full workflow for getting Viator's software running end t
 
 ## Start mission control
 
-Mission control lives in its own repo, separate from `urc-2023`.
+Mission control lives in its own repo, separate from `viator`.
 
 <Steps>
     <Step>
@@ -37,15 +37,15 @@ Mission control lives in its own repo, separate from `urc-2023`.
 </Steps>
 
 <Callout type="info" title="Run this on your own machine">
-    Mission control is a plain Node/Vite project - run it on your host, not inside the `urc-2023`
-    dev container.
+    Mission control is a plain Node/Vite project - run it on your host, not inside the `viator` dev
+    container.
 </Callout>
 
 ## Connect to the rover
 
 ```bash title="Terminal"
 ssh trickfire@192.168.0.112
-cd ~/urc-2023
+cd ~/viator
 ```
 
 ## Bring up the CAN bus
@@ -68,7 +68,7 @@ Back in the first terminal, bring the CAN interface up:
 make can-setup
 ```
 
-This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can1` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
+This loads the `can`/`can_raw`/`mttcan` kernel modules, brings `can0` up at a 1 Mbit bitrate, and sends enable + speed-mode commands to the drivebase motors (CAN IDs `0x155`-`0x15A`). You should see that traffic show up in the `candump` terminal.
 
 ## Build and launch
 

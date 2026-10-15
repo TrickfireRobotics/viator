@@ -7,7 +7,7 @@ slug: architecture
 ## Repo layout
 
 ```
-urc-2023/
+viator/
 ├── src/                  # ROS 2 workspace (colcon)
 │   ├── arm/              # Arm control node
 │   ├── camera/           # Camera streaming node
@@ -31,13 +31,13 @@ urc-2023/
 
 Not a ROS node itself; every node package imports from here.
 
-| File                                     | Purpose                                                                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lib/configs.py`                          | Static motor configuration (CAN IDs, motor type, gear ratios) shared across the whole robot.                                                                 |
-| `lib/interface/robot_interface.py`        | `RobotInterface` — the utility class nodes use to command motors (converts between physical units and raw motor commands, publishes over the CAN bridges).  |
-| `lib/interface/robot_info.py`             | `RobotInfo` — the read-side counterpart: subscribes to motor state topics and exposes the current state of every motor on the robot.                        |
-| `lib/motor_state/`                        | Typed state objects for each motor backend (`CANMotorState`, `MoteusMotorState`, `RMDX8MotorState`).                                                         |
-| `lib/color_codes.py`, `lib/json_msg.py`   | Small logging/serialization helpers.                                                                                                                         |
+| File | Purpose |
+| --- | --- |
+| `lib/configs.py` | Static motor configuration (CAN IDs, motor type, gear ratios) shared across the whole robot. |
+| `lib/interface/robot_interface.py` | `RobotInterface` — the utility class nodes use to command motors (converts between physical units and raw motor commands, publishes over the CAN bridges). |
+| `lib/interface/robot_info.py` | `RobotInfo` — the read-side counterpart: subscribes to motor state topics and exposes the current state of every motor on the robot. |
+| `lib/motor_state/` | Typed state objects for each motor backend (`CANMotorState`, `MoteusMotorState`, `RMDX8MotorState`). |
+| `lib/color_codes.py`, `lib/json_msg.py` | Small logging/serialization helpers. |
 
 ## Motor drivers
 
@@ -62,13 +62,13 @@ Two independent CAN motor controller backends, both bridging to the shared `lib/
 
 ## Robot-facing nodes
 
-| Node                      | Description                                                                                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `drivebase`                | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`.                                                                                        |
-| `arm`                       | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
-| `camera`                    | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`.                                       |
-| `heartbeat`                 | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop.                                                              |
-| `mission_control_updater`   | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
+| Node | Description |
+| --- | --- |
+| `drivebase` | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`. |
+| `arm` | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
+| `camera` | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`. |
+| `heartbeat` | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop. |
+| `mission_control_updater` | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
 
 ## `custom_interfaces`
 

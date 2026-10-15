@@ -22,7 +22,7 @@ fi
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
 # ---------- ROS workspace overlay ----------
-export ROS_WS="${ROS_WS:-/home/trickfire/urc-2023}"
+export ROS_WS="${ROS_WS:-/home/trickfire/viator}"
 
 _ros_source_env() {
     if [ -f "/opt/ros/${ROS_DISTRO}/setup.bash" ]; then

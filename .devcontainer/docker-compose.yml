@@ -4,12 +4,12 @@ services:
             context: ..
             dockerfile: .devcontainer/Dockerfile
             target: viator
-        image: urc-2023:latest
+        image: viator:latest
         container_name: viator
         user: trickfire
 
         volumes:
-            - ..:/home/trickfire/urc-2023
+            - ..:/home/trickfire/viator
             # - /dev/video0:/dev/video0
             - type: bind
               source: ${HOME}/.ssh
@@ -18,7 +18,7 @@ services:
               bind:
                   create_host_path: true
 
-        working_dir: /home/trickfire/urc-2023
+        working_dir: /home/trickfire/viator
 
         network_mode: host
 

@@ -41,8 +41,8 @@ class Heartbeat(Node):
         # give enough time (10s) for others to initialize
         time.sleep(10)
 
-        # flag to store connection status
-        self._connection_lost = False
+        # flag to store connection status; starts "lost" until the first heartbeat arrives
+        self._connection_lost = True
 
         # create subscription to mission control
         self._is_alive_subscriber = self.create_subscription(
@@ -81,12 +81,17 @@ class Heartbeat(Node):
         # Update the timestamp of the last received heartbeat message
         self._last_heartbeat_time = time.time()
 
-        # Log connection active as before
         # doesn't matter the data, pub always pub True
         # just check to make sure nothing is wrong with pub
         if msg.data:
-            self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
-            self._connection_lost = False
+            # Only log at INFO on the transition into a connected state (startup or
+            # reconnect); the recurring per-second tick goes to DEBUG so it doesn't
+            # flood the default INFO output.
+            if self._connection_lost:
+                self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self._connection_lost = False
+            else:
+                self.get_logger().debug(colorStr("Connection active", ColorCodes.GREEN_OK))
 
         # Tell the client that the heartbeat was received.
         msg = Bool()
