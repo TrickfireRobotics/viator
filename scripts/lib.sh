@@ -10,6 +10,7 @@ readonly COMPOSE_FILE="${REPO_ROOT}/.devcontainer/docker-compose.yml"
 readonly COMPOSE_SERVICE="viator"
 readonly LAUNCH_LOG_DIR="${REPO_ROOT}/log"
 readonly LAUNCH_LOG="${LAUNCH_LOG_DIR}/launch-latest.log"
+readonly TUI_EXECUTABLE="${REPO_ROOT}/install/tui/lib/tui/viator_tui"
 
 # ----------------------------------- output --------------------------------- #
 
@@ -123,6 +124,10 @@ delegateToContainer() {
 
     exec docker compose -f "$COMPOSE_FILE" exec "${tty_args[@]+"${tty_args[@]}"}" \
         -e "CAN_IFACE=${CAN_IFACE}" -e "VIATOR_T0=${VIATOR_T0}" "$COMPOSE_SERVICE" "$@"
+}
+
+requireTui() {
+    [ -x "$TUI_EXECUTABLE" ] || die "the tui isn't built, run 'make build'"
 }
 
 sourceWorkspace() {

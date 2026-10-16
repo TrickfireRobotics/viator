@@ -92,6 +92,10 @@ BUS_BUFFER_SIZE = 500
 BUS_DRAIN_PERIOD_SEC = 0.25
 BUS_DISPLAY_LIMIT = 12
 
+# often enough to read as live, rarely enough that a burst of startup output is one
+# redraw instead of two hundred
+DRAIN_PERIOD_SEC = 0.1
+
 # matches the supervisor: a module republishes every second, so three misses means gone
 STALE_AFTER_SEC = 3.0
 
@@ -286,8 +290,12 @@ class ViatorTui(App[None]):
         self._status: dict[str, StatusRecord] = {}
         self._status_seen: dict[str, float] = {}
 
+        # the bridge's threads only ever append here; everything that touches a widget
+        # happens on the drain timers, on the ui thread
+        self._pending_lock = threading.Lock()
+        self._pending_logs: deque[LogRecord] = deque(maxlen=BUFFER_SIZE)
+        self._pending_status: list[StatusRecord] = []
         self._bus_pending: deque[CanFrame] = deque(maxlen=BUS_BUFFER_SIZE)
-        self._bus_pending_lock = threading.Lock()
         self._bus_received = 0
         self._bus_ids: set[str] = set()
         self._bus_count = 0
@@ -345,23 +353,30 @@ class ViatorTui(App[None]):
         self._bridge.start()
         self.set_interval(1.0, self._refreshStatus)
         self.set_interval(1.0, self._refreshBusRate)
+        self.set_interval(DRAIN_PERIOD_SEC, self._drainRecords)
         self.set_interval(BUS_DRAIN_PERIOD_SEC, self._drainBus)
         self._updateTitles()
 
     def on_unmount(self) -> None:
         self._bridge.stop()
 
+    # the four `_handle` methods below run on the bridge's threads. They queue rather
+    # than call `call_from_thread`, which blocks its caller until the event loop gets
+    # round to it: a thread parked in there when the app starts unmounting deadlocks
+    # against the shutdown, which is how quitting during the startup burst used to wedge
     def _handleStatus(self, record: StatusRecord) -> None:
-        self.call_from_thread(self._applyStatus, record)
+        with self._pending_lock:
+            self._pending_status.append(record)
 
     def _handleLog(self, record: LogRecord) -> None:
-        self.call_from_thread(self._applyLog, record)
+        with self._pending_lock:
+            self._pending_logs.append(record)
 
     def _handleBusState(self, state: str) -> None:
         self._bus_state = state
 
     def _handleFrame(self, frame: CanFrame) -> None:
-        with self._bus_pending_lock:
+        with self._pending_lock:
             self._bus_pending.append(frame)
             self._bus_received += 1
 
@@ -384,11 +399,23 @@ class ViatorTui(App[None]):
         if not self._paused and self._shouldShow(record):
             self.query_one("#log", RichLog).write(self._renderRecord(record))
 
+    def _drainRecords(self) -> None:
+        with self._pending_lock:
+            statuses = self._pending_status
+            logs = list(self._pending_logs)
+            self._pending_status = []
+            self._pending_logs.clear()
+
+        for status in statuses:
+            self._applyStatus(status)
+        for record in logs:
+            self._applyLog(record)
+
     def _drainBus(self) -> None:
         # the bus runs at thousands of frames a second with the drivebase moving, so the
         # pane shows the latest frame per id rather than an ever-growing backlog, and
         # every frame is still counted for the rate in the title
-        with self._bus_pending_lock:
+        with self._pending_lock:
             frames = list(self._bus_pending)
             self._bus_pending.clear()
             received = self._bus_received

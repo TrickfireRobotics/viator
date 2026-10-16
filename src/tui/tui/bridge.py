@@ -2,8 +2,8 @@
 The ROS side of the tui: a read-only observer, not launched with the rover.
 
 rclpy and Textual each want to own an event loop, so the executor spins on its own
-thread and hands results over through plain callables. The app wraps those in
-`call_from_thread` before touching a widget.
+thread and hands results over through plain callables. Those run on this side's
+threads, so the app queues what they deliver and draws it on its own.
 """
 
 import os
@@ -27,6 +27,13 @@ from custom_interfaces.msg import NodeStatus
 from lib.status import STATUS_TOPIC
 
 ROSOUT_TOPIC = "/rosout"
+
+# how often the spin thread surfaces to notice that it should stop
+SPIN_WAKE_SEC = 0.1
+
+# stop() runs on the ui thread while textual tears the screen down, so every wait in it
+# is bounded: a shutdown that blocks forever takes the terminal with it
+SHUTDOWN_TIMEOUT_SEC = 2.0
 
 # set by the scripts, which are the only thing that knows
 CAN_IFACE = os.environ.get("CAN_IFACE", "can0")
@@ -291,10 +298,12 @@ class RosBridge:
         self._executor: SingleThreadedExecutor | None = None
         self._node: ObserverNode | None = None
         self._thread: threading.Thread | None = None
+        self._stopping = threading.Event()
         self._launch_tail = LaunchLogTail(launch_log, on_log) if launch_log else None
         self._can_tail = CanTail(CAN_IFACE, on_frame, on_bus_state)
 
     def start(self) -> None:
+        self._stopping.clear()
         rclpy.init()
         self._node = ObserverNode(self._on_status, self._on_log)
         self._executor = SingleThreadedExecutor()
@@ -307,26 +316,41 @@ class RosBridge:
         self._can_tail.start()
 
     def stop(self) -> None:
+        self._stopping.set()
         if self._launch_tail is not None:
             self._launch_tail.stop()
         self._can_tail.stop()
+
+        # the spin thread has to be out of the executor before anything else here:
+        # `executor.shutdown()` waits on in-flight callbacks with no timeout of its own,
+        # so calling it first hangs the caller for as long as the thread is busy
+        if self._thread is not None:
+            self._thread.join(timeout=SHUTDOWN_TIMEOUT_SEC)
+            if self._thread.is_alive():
+                # a thread still in a callback owns the node's handles, and pulling them
+                # out from under it segfaults. It is a daemon; leave it to process exit
+                return
+            self._thread = None
+
         if self._executor is not None:
-            self._executor.shutdown()
+            self._executor.shutdown(timeout_sec=SHUTDOWN_TIMEOUT_SEC)
+            self._executor = None
         if self._node is not None:
             self._node.destroy_node()
             self._node = None
-        if self._thread is not None:
-            self._thread.join(timeout=2.0)
-            self._thread = None
         if rclpy.ok():
             rclpy.shutdown()
-        self._executor = None
 
     def _spin(self) -> None:
-        if self._executor is None:
+        executor = self._executor
+        if executor is None:
             return
-        try:
-            self._executor.spin()
-        except Exception:
-            # the context going away under us during shutdown is expected
-            pass
+        # spin() parks in the wait set until a message arrives and only comes out when
+        # the context is torn down, which is too late to be useful on quit, so wake up
+        # on a timeout and check whether we have been asked to stop
+        while not self._stopping.is_set() and rclpy.ok():
+            try:
+                executor.spin_once(timeout_sec=SPIN_WAKE_SEC)
+            except Exception:
+                # the context going away under us during shutdown is expected
+                return

@@ -206,11 +206,12 @@ containerSide() {
         exit 0
     fi
 
+    requireTui
     note "opening, ? for keys, q to quit"
     sleep 1
 
     export VIATOR_LAUNCH_LOG="$LAUNCH_LOG"
-    ros2 run tui viator_tui
+    "$TUI_EXECUTABLE"
 }
 
 if inContainer; then

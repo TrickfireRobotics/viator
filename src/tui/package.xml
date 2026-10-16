@@ -11,9 +11,6 @@
   <exec_depend>rcl_interfaces</exec_depend>
   <exec_depend>custom_interfaces</exec_depend>
   <exec_depend>lib</exec_depend>
-  <!-- textual has no rosdep key, it's pip installed in .devcontainer/Dockerfile -->
-
-  <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
