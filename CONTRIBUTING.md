@@ -9,8 +9,8 @@ See [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) f
 ## Code Style
 
 - Formatting is enforced by `make format`, which runs:
-    - [ruff](https://docs.astral.sh/ruff/) to format and lint Python code in `src`
-    - [shfmt](https://github.com/mvdan/sh) to format shell scripts in `scripts/` and `.devcontainer/`
+    - [ruff](https://docs.astral.sh/ruff/) to format and lint Python code in `src` and `scripts`
+    - [shfmt](https://github.com/mvdan/sh) to format shell scripts in `.devcontainer/`
     - [Prettier](https://prettier.io/) to format Markdown and JSON files
 - Run `make format` before committing, or let your editor format on save
 - Keep changes consistent with the formatting these tools apply — don't hand-format

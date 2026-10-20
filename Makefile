@@ -10,46 +10,46 @@
 # --- running the rover ---
 
 help: ## show this list
-	@./scripts/help.sh $(MAKEFILE_LIST)
+	@./scripts/help.py $(MAKEFILE_LIST)
 
 launch: ## main launch method
-	@./scripts/launch.sh $(FLAGS)
+	@./scripts/launch.py $(FLAGS)
 
 tui: ## open tui with launch already running
-	@./scripts/tui.sh
+	@./scripts/tui.py
 
 raw: ## legacy ROS only launch with no tui
-	@./scripts/raw.sh
+	@./scripts/raw.py
 
 # --- the rover's CAN bus ---
 
 can-setup: ## bring the CAN bus up right now, by hand
-	@./scripts/can.sh
+	@./scripts/can.py
 
 can-sudoers: ## add can commands to sudoers so they dont require sudo
-	@./scripts/can-sudoers.sh
+	@./scripts/can_sudoers.py
 
 # --- development ---
 
 build: ## build the ROS workspace
-	@./scripts/build.sh
+	@./scripts/build.py
 
 clean: ## clean build files
 	rm -rf build install log
 
 container: ## build and attach to the rover container
-	@./scripts/container.sh $(FLAGS)
+	@./scripts/container.py $(FLAGS)
 
 connect: ## attach a shell to the running rover container
-	@./scripts/container.sh -a
+	@./scripts/container.py -a
 
 sync: ## rsync your codebase into the rover
-	@./scripts/sync.sh
+	@./scripts/sync.py
 
 format: ## format python, shell, markdown and json
-	ruff format src
-	ruff check --fix src
-	shfmt -i 4 -s -w scripts/ .devcontainer/
+	ruff format src scripts
+	ruff check --fix src scripts
+	shfmt -i 4 -s -w .devcontainer/
 	npx -y prettier@latest --write "**/*.{md,json}"
 
 hooks: ## install the pre-commit hooks

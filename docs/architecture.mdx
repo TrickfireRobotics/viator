@@ -22,7 +22,7 @@ viator/
 │   ├── tui/              # The terminal TUI
 │   ├── viator_launch/    # Top-level launch file
 │   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
-├── scripts/              # one per make target, plus lib.sh (see below)
+├── scripts/              # one per make target, plus _lib.py (see below)
 ├── .devcontainer/        # Dockerfile + compose file for the container
 └── Makefile              # the entry point; `make` lists every target
 ```
@@ -31,17 +31,17 @@ viator/
 
 ## `scripts/` — the workflow
 
-Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly. `scripts/lib.sh` holds the shared output helpers, environment checks and the step runner, which is why every script reports in the same format.
+Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly. `scripts/_lib.py` holds the shared output helpers, environment checks and the step runner, which is why every script reports in the same format.
 
 | Script | Purpose |
 | --- | --- |
-| `launch.sh` | The whole bringup. On the host: check the host, bring CAN up, build and start the container, build the workspace, then re-run itself inside the container. In the container: start the node graph and hand the terminal to the TUI. |
-| `raw.sh` | The node graph alone, in the foreground. |
-| `tui.sh` | The TUI alone, attached to a rover that is already running. |
-| `build.sh` | `colcon build`. |
-| `can.sh` | CAN interface bringup and drivebase enable. |
-| `can-sudoers.sh` | One-off rover setup: the sudoers rule that lets the bringup run without a password. |
-| `container.sh`, `sync.sh` | A shell in the dev container; rsyncing a checkout to the rover. |
+| `launch.py` | The whole bringup. On the host: check the host, bring CAN up, build and start the container, build the workspace, then re-run itself inside the container. In the container: start the node graph and hand the terminal to the TUI. |
+| `raw.py` | The node graph alone, in the foreground. |
+| `tui.py` | The TUI alone, attached to a rover that is already running. |
+| `build.py` | `colcon build`. |
+| `can.py` | CAN interface bringup and drivebase enable. |
+| `can_sudoers.py` | One-off rover setup: the sudoers rule that lets the bringup run without a password. |
+| `container.py`, `sync.py` | A shell in the dev container; rsyncing a checkout to the rover. |
 
 Scripts that need ROS sourced re-run themselves inside the container when they're started on the host, so there is no "wrong terminal" to be in.
 
