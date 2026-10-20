@@ -24,11 +24,12 @@ def main(argv: list[str]) -> None:
     if not target_user:
         lib.die("this needs to be run via sudo, not as root directly")
 
-    tool_paths = []
+    tool_paths: list[str] = []
     for tool in TOOLS:
         path = shutil.which(tool)
         if not path:
             lib.die(f"can't find {tool}, which can.py needs")
+        assert path is not None  # lib.die above is NoReturn, mypy just can't see that cross-module
         tool_paths.append(path)
     rule_commands = ", ".join(tool_paths)
 
