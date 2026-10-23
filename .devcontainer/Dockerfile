@@ -18,7 +18,10 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     libboost-python-dev \
     libopencv-dev \
     python3-opencv \
-    ros-humble-cv-bridge
+    ros-humble-cv-bridge \
+    python3-dev \
+    portaudio19-dev \
+    libportaudio2
 
 RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
     && echo "/opt/ros/$ROS_DISTRO/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)" >> /etc/ld.so.conf.d/ros2.conf \
@@ -30,6 +33,10 @@ RUN pip3 install --no-cache-dir \
     pyusb \
     pybind11 \
     pybind11-stubgen \
+    cffi \
+    "pyaudio>=0.2.14" \
+    "sounddevice>=0.5.6" \
+    vosk \
     "pydocstyle>=6.3.0"
 
 # ---- dev tooling ----
