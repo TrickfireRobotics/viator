@@ -27,7 +27,6 @@ known-first-party = [
     "lib",
     "mission_control_updater",
     "supervisor",
-    "tui",
 ]
 
 [tool.ruff.format]

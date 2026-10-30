@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
-"""make launch: bring the rover up and leave you in the tui.
+"""make launch: bring the rover up and stream its output into this terminal.
 
 usage: ./launch.py [-n] [-c] [-s] [-B] [-v]
 """
 
 from __future__ import annotations
 
-import atexit
 import getopt
 import os
 import signal
 import subprocess
 import sys
-import time
+import threading
+from collections.abc import Callable
 from types import FrameType
 
 import _lib as lib
 
 LAUNCH_PATTERN = "ros2 launch viator_launch"
-STARTUP_GRACE_SEC = 3
+
+# a little longer than the supervisor's own grace period, so its log line and our banner
+# agree about what came up
+READY_TIMEOUT_SEC = 20.0
+
+# the tail of a cascade shutdown is eight nodes politely exiting, so the line that
+# matters has scrolled a long way up by the time you read it
+FIRST_ERRORS = 3
 
 USAGE = """\
 usage: ./launch.py [-n] [-c] [-s] [-B] [-v]
@@ -152,137 +159,161 @@ def _host_side_body(no_cache: bool, force_recreate: bool, skip_can: bool, skip_b
         if lib.run_step("colcon build", lib.inside_argv("./scripts/build.py")) != 0:
             lib.die("the workspace didn't build")
 
-    # hand over rather than wrap: the tui needs this terminal
-    lib.section("rover")
+    # hand over rather than wrap: from here on this terminal is the graph's output
     lib.delegate_to_container("./scripts/launch.py")
 
 
 # ---------------------------------- container --------------------------------- #
 
+# the graph's output and the readiness banner are written from different threads, and
+# both write whole lines at a time, so one lock is enough to keep them from interleaving
+_out_lock = threading.Lock()
+
+
+def _emit(text: str) -> None:
+    with _out_lock:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+
+def _say_locked(report: Callable[[str], None], message: str) -> None:
+    with _out_lock:
+        report(message)
+        sys.stdout.flush()
+
 
 def _report_launch_failure() -> None:
     log_text = lib.LAUNCH_LOG.read_text(errors="replace") if lib.LAUNCH_LOG.exists() else ""
 
-    errors = [line for line in log_text.splitlines() if "[ERROR]" in line][:3]
+    errors = [line for line in log_text.splitlines() if "[ERROR]" in line][:FIRST_ERRORS]
     if errors:
         lib.note("first error")
         lib.quote("\n".join(errors))
 
-    lib.note(f"last 20 lines of {lib.LAUNCH_LOG}")
-    lib.quote("\n".join(log_text.splitlines()[-20:]))
+
+def _watch_readiness(live: threading.Event) -> None:
+    """
+    Prints the one line that answers "did the rover come up", read off the status topic.
+
+    Runs alongside the stream rather than before it, so the graph's own output isn't held
+    back while we wait.
+    """
+    result = subprocess.run(
+        [str(lib.STATUS_EXECUTABLE), "--summary", "--wait", str(READY_TIMEOUT_SEC)],
+        capture_output=True,
+        text=True,
+    )
+
+    # the graph died while we were waiting, and the failure report says more than we can
+    if not live.is_set():
+        return
+
+    lines = result.stdout.strip().splitlines() or ["could not read the status topic"]
+    lib.section("rover")
+
+    if result.returncode == 0:
+        _say_locked(lib.ok, lines[0])
+    else:
+        _say_locked(lib.bad, lines[0])
+        _say_locked(lib.note, "'make status' for the detail")
+    for line in lines[1:]:
+        _say_locked(lib.note, line)
 
 
-def _stream_log(graph_proc: subprocess.Popen[bytes] | None) -> None:
-    with lib.LAUNCH_LOG.open("r", errors="replace") as f:
-        while True:
-            chunk = f.read()
-            if chunk:
-                sys.stdout.write(chunk)
-                sys.stdout.flush()
-            if graph_proc is not None and graph_proc.poll() is not None:
-                return
-            time.sleep(0.2)
+def _stream(proc: subprocess.Popen[bytes]) -> bool:
+    """
+    Tees the graph's output to this terminal and to the launch log. True if interrupted.
+    """
+    assert proc.stdout is not None
+    interrupted = threading.Event()
+
+    def _on_interrupt(_signum: int, _frame: FrameType | None) -> None:
+        # Ctrl-C reaches the whole process group, `ros2 launch` included, so there is
+        # nothing to forward and nothing to escalate: launch does its own escalation on a
+        # second one. Note it and carry on reading.
+        #
+        # Deliberately does not raise. A KeyboardInterrupt out of readline() throws away
+        # whatever was already in the pipe, which is the shutdown output. Returning
+        # normally means PEP 475 retries the read instead.
+        interrupted.set()
+
+    previous = signal.signal(signal.SIGINT, _on_interrupt)
+
+    try:
+        with lib.LAUNCH_LOG.open("wb") as log_f:
+            while True:
+                line = proc.stdout.readline()
+                if not line:
+                    break
+                log_f.write(line)
+                log_f.flush()
+                _emit(line.decode(errors="replace"))
+    finally:
+        signal.signal(signal.SIGINT, previous)
+
+    return interrupted.is_set()
 
 
 def container_side() -> None:
     lib.section("graph")
     lib.source_workspace()
 
-    # the tail of a cascade shutdown is eight nodes politely exiting; the line that matters is
-    # the first error, a long way further up
-    state = {"owns_graph": False, "graph_pid": 0, "cleaned_up": False}
-
-    def cleanup() -> None:
-        if state["cleaned_up"]:
-            return
-        state["cleaned_up"] = True
-
-        # put the terminal back the way textual found it
-        if sys.stdout.isatty():
-            sys.stdout.write("\033[?1049l\033[?25h")
-            sys.stdout.flush()
-            subprocess.run(["stty", "sane"])
-
-        lib.section("graph")
-
-        if state["owns_graph"] and state["graph_pid"]:
-            try:
-                os.killpg(state["graph_pid"], signal.SIGKILL)
-                lib.ok("stopped")
-            except ProcessLookupError:
-                pass
-
-        lib.note(f"launch output in {lib.LAUNCH_LOG}")
-
-    # trapped on INT as well as EXIT, and INT is followed by EXIT, so only run once
-    def _signal_cleanup(signum: int, _frame: FrameType | None) -> None:
-        cleanup()
-        raise SystemExit(128 + signum)
-
-    signal.signal(signal.SIGINT, _signal_cleanup)
-    signal.signal(signal.SIGTERM, _signal_cleanup)
-    atexit.register(cleanup)
-
-    existing_pid = ""
     if lib.require_command("pgrep"):
         result = subprocess.run(["pgrep", "-f", LAUNCH_PATTERN], capture_output=True, text=True)
-        lines = result.stdout.strip().splitlines()
-        existing_pid = lines[0] if lines else ""
+        if result.stdout.strip():
+            lib.bad(f"already running as pid {result.stdout.split()[0]}")
+            lib.note("'make status' for how it's doing, 'make logs' to follow its output")
+            lib.die("not starting a second graph")
 
-    graph_proc: subprocess.Popen[bytes] | None = None
+    lib.LAUNCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    if existing_pid:
-        lib.ok(f"already running as pid {existing_pid}", "attaching")
-        lib.note("quitting the tui will leave it running")
+    # same process group, so Ctrl-C reaches `ros2 launch` directly and it runs its own
+    # orderly shutdown instead of us having to guess at killing things
+    proc = subprocess.Popen(
+        ["ros2", "launch", "viator_launch", "robot.launch.py"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+
+    def _on_terminate(_signum: int, _frame: FrameType | None) -> None:
+        # SIGINT rather than SIGTERM: it's what launch shuts the graph down cleanly on
+        proc.send_signal(signal.SIGINT)
+
+    signal.signal(signal.SIGTERM, _on_terminate)
+
+    lib.ok(f"running as pid {proc.pid}", f"output also in {lib.LAUNCH_LOG}")
+    lib.note("Ctrl-C to stop the rover, again to stop waiting for it")
+    print()
+
+    live = threading.Event()
+    live.set()
+
+    if lib.status_available():
+        threading.Thread(target=_watch_readiness, args=(live,), daemon=True).start()
     else:
-        lib.LAUNCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
-        lib.LAUNCH_LOG.write_text("")
+        lib.warn("the status reporter isn't built, no readiness summary. run 'make build'")
 
-        with lib.LAUNCH_LOG.open("wb") as log_f:
-            graph_proc = subprocess.Popen(
-                ["ros2", "launch", "viator_launch", "robot.launch.py"],
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
-            )
-        state["graph_pid"] = graph_proc.pid
-        state["owns_graph"] = True
+    interrupted = _stream(proc)
+    status = proc.wait()
+    live.clear()
 
-        # a graph that is going to die on startup does it in a second or two, and an empty tui
-        # is a terrible way to find that out
-        time.sleep(STARTUP_GRACE_SEC)
+    print()
+    lib.section("graph")
 
-        if graph_proc.poll() is not None:
-            status = graph_proc.returncode
-            state["owns_graph"] = False
-
-            # launch exits 0 after an orderly cascade shutdown, which is what a failing motor
-            # node causes, so "exited 0" would read as success
-            if status == 0:
-                lib.bad("shut itself down during startup")
-            else:
-                lib.bad(f"exited {status} during startup")
-
-            _report_launch_failure()
-            raise SystemExit(1)
-
-        lib.ok(f"running as pid {graph_proc.pid}")
-
-    lib.section("tui")
-
-    # no terminal means no tui, which is what a pipe or CI gets
-    if not sys.stdout.isatty():
-        lib.note("no terminal, streaming the log instead")
-        _stream_log(graph_proc)
+    if interrupted:
+        lib.ok("stopped")
         raise SystemExit(0)
 
-    lib.require_tui()
-    lib.note("opening, ? for keys, q to quit")
-    time.sleep(1)
+    # launch exits 0 after an orderly cascade shutdown, which is what a failing motor
+    # node causes, so "exited 0" would read as success
+    if status == 0:
+        lib.bad("shut itself down, so a node that commands motors failed")
+    else:
+        lib.bad(f"exited {status}")
 
-    os.environ["VIATOR_LAUNCH_LOG"] = str(lib.LAUNCH_LOG)
-    # not exec'd: the cleanup trap needs to run after the tui exits
-    subprocess.run([str(lib.TUI_EXECUTABLE)])
+    _report_launch_failure()
+    lib.note(f"full output in {lib.LAUNCH_LOG}")
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":

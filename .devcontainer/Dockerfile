@@ -6,6 +6,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install --no-install-recommends -y \
     python3-pip \
+    python3.10-venv \
     ros-humble-rosbridge-server \
     ros-humble-rosapi \
     usbutils \
@@ -26,7 +27,6 @@ RUN echo "/opt/ros/$ROS_DISTRO/lib" > /etc/ld.so.conf.d/ros2.conf \
 RUN pip3 install --no-cache-dir \
     "numpy<2" \
     moteus \
-    "textual>=8,<9" \
     pyusb \
     pybind11 \
     pybind11-stubgen
@@ -69,7 +69,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN pip3 install --no-cache-dir \
     ruff \
     mypy \
-    pre-commit \
     && curl -sSL "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_$(dpkg --print-architecture)" \
     -o /usr/local/bin/shfmt \
     && chmod +x /usr/local/bin/shfmt

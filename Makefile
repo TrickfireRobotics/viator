@@ -2,8 +2,8 @@
 # anything here can also be run directly
 # comments starting with `##` are printed in `make help` keep this convention please
 
-.PHONY: help launch tui raw build clean container connect can-setup \
-	can-sudoers sync format hooks
+.PHONY: help launch status logs build clean container connect can-setup \
+	can-sudoers sync format
 
 .DEFAULT_GOAL := help
 
@@ -12,14 +12,16 @@
 help: ## show this list
 	@./scripts/help.py $(MAKEFILE_LIST)
 
-launch: ## main launch method
+launch: ## bring the rover up and stream its output here
 	@./scripts/launch.py $(FLAGS)
 
-tui: ## open tui with launch already running
-	@./scripts/tui.py
+# exits non-zero when the rover isn't ready, which is useful to a script and looks like
+# a broken build here, so only the script keeps the code
+status: ## print what every module says about itself (FLAGS=-w to keep watching)
+	@./scripts/status.py $(FLAGS) || true
 
-raw: ## legacy ROS only launch with no tui
-	@./scripts/raw.py
+logs: ## follow the launch output of a rover thats already running
+	@./scripts/logs.py
 
 # --- the rover's CAN bus ---
 
@@ -50,7 +52,3 @@ format: ## format python, shell, markdown and json
 	ruff format src scripts
 	ruff check --fix src scripts
 	shfmt -i 4 -s -w .devcontainer/
-	npx -y prettier@latest --write "**/*.{md,json}"
-
-hooks: ## install the pre-commit hooks
-	pre-commit install

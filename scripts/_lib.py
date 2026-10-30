@@ -20,7 +20,7 @@ COMPOSE_FILE = REPO_ROOT / ".devcontainer" / "docker-compose.yml"
 COMPOSE_SERVICE = "viator"
 LAUNCH_LOG_DIR = REPO_ROOT / "log"
 LAUNCH_LOG = LAUNCH_LOG_DIR / "launch-latest.log"
-TUI_EXECUTABLE = REPO_ROOT / "install" / "tui" / "lib" / "tui" / "viator_tui"
+STATUS_EXECUTABLE = REPO_ROOT / "install" / "supervisor" / "lib" / "supervisor" / "viator_status"
 
 CAN_IFACE = os.environ.setdefault("CAN_IFACE", "can0")
 
@@ -213,9 +213,8 @@ def delegate_to_container(*args: str) -> NoReturn:
     raise AssertionError("unreachable, os.execvp replaces the process")
 
 
-def require_tui() -> None:
-    if not os.access(TUI_EXECUTABLE, os.X_OK):
-        die("the tui isn't built, run 'make build'")
+def status_available() -> bool:
+    return os.access(STATUS_EXECUTABLE, os.X_OK)
 
 
 def source_bash_env(*scripts: str) -> None:

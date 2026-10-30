@@ -17,6 +17,9 @@ setup(
     description="Collects per-node health reports and summarises rover readiness",
     license="Apache-2.0",
     entry_points={
-        "console_scripts": ["supervisor = supervisor.supervisor:main"],
+        "console_scripts": [
+            "supervisor = supervisor.supervisor:main",
+            "viator_status = supervisor.status_cli:main",
+        ],
     },
 )

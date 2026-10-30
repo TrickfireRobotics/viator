@@ -8,5 +8,4 @@ Software developed by [Trickfire Robotics](https://www.trickfirerobotics.org/) f
 
 - [Getting Started](https://docs.trickfirerobotics.com/viator/getting-started) - dev environment setup
 - [Launching the Rover](https://docs.trickfirerobotics.com/viator/launching) - launching the rover
-- [The TUI](https://docs.trickfirerobotics.com/viator/tui) - how to read and use the launch tui
 - [Architecture](https://docs.trickfirerobotics.com/viator/architecture) - architecture explanations

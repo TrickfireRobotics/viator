@@ -1,5 +1,5 @@
 """
-Manual health checking of the CAN line, so that we can display CAN health in the tui.
+Manual health checking of the CAN line, so can_rmdx8 can report bus health as its own status.
 """
 
 from collections import Counter

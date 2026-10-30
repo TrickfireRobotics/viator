@@ -43,8 +43,8 @@ Everything runs in a Docker container so every contributor gets the same ROS 2 H
 </Steps>
 
 <Callout type="info" title="You don't need VS Code">
-    The dev container is just a Docker container, and `make launch` builds and starts it for you.
-    On the rover, which has no editor, that is the only way it gets used. VS Code only adds editor
+    The dev container is just a Docker container, and `make launch` builds and starts it for you. On
+    the rover, which has no editor, that is the only way it gets used. VS Code only adds editor
     integration on top.
 </Callout>
 
@@ -56,7 +56,7 @@ One command, from the repo root:
 make launch
 ```
 
-That checks the host, brings the CAN bus up, builds the container and the workspace, starts the node graph, and leaves you in the [TUI](./tui.mdx). See [Launching the Rover](./launching.mdx) for what each phase does and the flags that skip parts of it.
+That checks the host, brings the CAN bus up, builds the container and the workspace, starts the node graph, and streams its output into your terminal until you Ctrl-C. See [Launching the Rover](./launching.mdx) for what each phase does and the flags that skip parts of it.
 
 To see everything else that's available:
 
@@ -72,7 +72,7 @@ make
 
 ## Formatting and linting
 
-Python is formatted and linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with [mypy](https://mypy-lang.org/); shell scripts with [shfmt](https://github.com/mvdan/sh); Markdown and JSON with [Prettier](https://prettier.io/).
+Python is formatted and linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with [mypy](https://mypy-lang.org/); shell scripts with [shfmt](https://github.com/mvdan/sh).
 
 ```bash title="Terminal"
 make format
@@ -83,5 +83,4 @@ Install the recommended VS Code extensions when prompted and your editor does th
 ## Where to go next
 
 - [Launching the Rover](./launching.mdx) - the one command, its flags, and everything around it.
-- [The TUI](./tui.mdx) - how to read the terminal UI and every key it responds to.
 - [Architecture](./architecture.mdx) - what each ROS package does and how they fit together.
