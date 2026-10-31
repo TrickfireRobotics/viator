@@ -36,7 +36,7 @@ Every line it prints has the same three parts: how many seconds into the launch 
 | --- | --- |
 | `host` | Docker and compose are there and reachable, and which commit you're about to run |
 | `can0` | The bus is up at 1 Mbit, and brings it up if it isn't |
-| `docker` | Builds the `viator:dev` image if anything changed, and starts the container |
+| `docker` | Builds the rover container image if anything changed, and starts the container |
 | `workspace` | `colcon build` inside the container |
 | `graph` | Starts the node graph and streams it here |
 | `rover` | Whether the rover came up |
@@ -239,16 +239,19 @@ make            # list every target
 | `make submodules` | Fetch the repository's git submodules. Once per checkout, unless they change |
 | `make launch` | Bring everything up and stream it here |
 | `make build` | Build the workspace |
+| `make clean` | Remove build output, logs, and recorded bags |
+| `make container` | Build and start the selected container, then open a shell |
 | `make connect` | Get a shell in the dev container |
 | `make can-setup` | Bring the CAN bus up right now, by hand |
 | `make can-sudoers` | Let CAN bringup run without a sudo password. Once per rover |
-| `make sync` | rsync this checkout to the rover (`--ip`, `--path`) |
+| `make sync` | rsync this checkout to the rover (`--ip`, `--path`, `--user`, `-n`) |
 | `make format` | Format and autofix python |
 | `make lint` | Everything CI checks: ruff, mypy |
 
-`build` works from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
+`build` works from the rover's host and from inside the container - it re-runs itself in the
+container when needed.
 
-Every target is a thin wrapper over the script of the same name in `scripts/`, so each one takes `--help`:
+The script-backed targets above have a corresponding file in `scripts/` and accept `--help`:
 
 ```bash title="Terminal"
 ./scripts/launch.py --help
@@ -285,8 +288,8 @@ Mission control lives in its own repo and runs on **your** machine, not the rove
     </Step>
     <Step>
         In the settings tab, point the websocket at the rover's address - the same one you SSH
-        into. The connection indicator turns green once the rover's `rosbridge_server` is up and
-        reachable.
+        into. The connection indicator turns green once the rover's `rosbridge_websocket` node is
+        up and reachable.
     </Step>
 
 </Steps>

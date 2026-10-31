@@ -6,7 +6,8 @@ slug: /
 
 This is the software for **Viator**, Trickfire Robotics' rover for the [University Rover Challenge](https://urc.marssociety.org/), built on [ROS 2 Humble](https://docs.ros.org/en/humble/).
 
-Everything runs in a Docker container so every contributor gets the same ROS 2 Humble environment regardless of host OS, and the rover runs the same one.
+Development tools run in a Docker container so every contributor gets the same ROS 2 Humble
+environment. The rover runs the same base image with only its runtime dependencies.
 
 ## Prerequisites
 
@@ -47,14 +48,14 @@ Everything runs in a Docker container so every contributor gets the same ROS 2 H
 </Steps>
 
 <Callout type="info" title="You don't need VS Code">
-    The dev container is just a Docker container, and `make launch` builds and starts it for you. On
-    the rover, which has no editor, that is the only way it gets used. VS Code only adds editor
-    integration on top.
+    The dev container is just a Docker container: `make container` builds it, starts it, and opens
+    a shell. On the rover, which has no editor, `make launch` builds the rover container as part
+    of bringup. VS Code only adds editor integration on top.
 </Callout>
 
-## Run it
+## Run the rover
 
-One command, from the repo root:
+On the Orin, one command from the repo root:
 
 ```bash title="Terminal"
 make launch

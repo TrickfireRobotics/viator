@@ -38,14 +38,17 @@ There are two compose files, because a laptop and the rover need different thing
 
 | File | Gives |
 | --- | --- |
-| `docker-compose.yml` | The dev container as a laptop runs it. Unprivileged |
-| `docker-compose.rover.yml` | What the Orin adds: the `rover` image, privileged mode and the hardware |
+| `docker-compose.yml` | The laptop dev-container configuration. It runs unprivileged. |
+| `docker-compose.rover.yml` | The Orin override: selects the `rover` image and grants the privileges needed for hardware access. |
 
 The scripts pick the second one up automatically when they detect an Orin, so there is nothing to pass. `VIATOR_PROFILE=rover` or `=dev` forces the choice, for testing one from the other.
 
 ## `scripts/` — the workflow
 
-Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly and every one takes `--help`. `scripts/_lib.py` holds the shared output helpers, the four subprocess wrappers, environment checks and the step runner, which is why every script reports in the same format.
+The workflow targets in `Makefile` wrap the Python scripts in this directory; the remaining targets
+manage submodules, cleanup, and linting directly. Script-backed commands can also run directly and
+accept `--help`. `scripts/_lib.py` holds the shared output helpers, the four subprocess wrappers,
+environment checks, and the step runner, which is why the scripts report in the same format.
 
 | Script | Purpose |
 | --- | --- |
@@ -95,10 +98,10 @@ Two independent CAN motor controller backends, both bridging to the shared `lib/
 | Node | Description |
 | --- | --- |
 | `drivebase` | Subscribes to left/right drive commands and forwards them to the wheel motors via `RobotInterface`. |
-| `arm` | Arm control; supports per-motor velocity/position control today (`individual_control_vel.py`), with inverse kinematics stubbed out as a future `ArmModeEnum` mode. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
+| `arm` | Arm control; currently supports per-motor velocity control (`individual_control_vel.py`). Position control and inverse kinematics have modes reserved in `ArmModeEnum`. Mode is switched at runtime via the `custom_interfaces/srv/ArmMode` service. |
 | `camera` | `roscamera` node (`camera/roscamera.py`) enumerates connected USB cameras and publishes compressed image streams over `sensor_msgs/CompressedImage`. |
 | `heartbeat` | Connection watchdog: if the base station connection drops, it's responsible for cutting power to the motors as a safety stop. |
-| `mission_control_updater` | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for the mission control dashboard (delivered over `ros-humble-rosbridge-server`, installed in the Dockerfile). |
+| `mission_control_updater` | Periodically collects motor state via `RobotInfo`, serializes it to JSON (`info_to_json_helper.py`), and publishes it for mission control. The `rosbridge_server` package exposes the graph to the dashboard and is installed through `rosdep`. |
 
 ## Observability nodes
 
