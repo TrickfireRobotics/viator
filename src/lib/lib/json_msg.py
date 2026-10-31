@@ -41,15 +41,15 @@ class JsonMsg(Generic[T]):
     ```
     """
 
-    def toMsg(self) -> String:
+    def to_msg(self) -> String:
         """
         Convert the message object into a String message containing a Json string.
         """
         str_msg = String()
-        str_msg.data = json.dumps(self.toDict())
+        str_msg.data = json.dumps(self.to_dict())
         return str_msg
 
-    def toDict(self) -> dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Converts the message object into a dictionary.
         """
@@ -58,7 +58,7 @@ class JsonMsg(Generic[T]):
         }
 
     @classmethod
-    def fromJsonMsg(cls, msg: String) -> T:
+    def from_json_msg(cls, msg: String) -> T:
         """
         Creates a JsonMsg object from a string message.
         """

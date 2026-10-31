@@ -1,153 +1,89 @@
 import time
 
-import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
 
 from lib import configs
-from lib.color_codes import ColorCodes, colorStr
+from lib.color_codes import ColorCodes, color_str
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import run_nodes
+from lib.status import StatusReporter
 
 # Credit: Most of this code is credit to Anna. I (Hong) just
 # add some finishing code and clean up the class.
 
+# two missed heartbeats, so a single dropped message doesn't stop the rover
+HEARTBEAT_TIMEOUT_SEC = 2.0
+
 
 class Heartbeat(Node):
     """
-    The Heartbeat is responsible to check the connection status
-    of the rover and shut down all motors if the connection is lost.
-
-    Args:
-        Node (Node): ROS Node
+    Watches mission control's heartbeat and stops every motor when it stops arriving.
     """
 
     def __init__(self) -> None:
-        """
-        Initialize the heartbeat node and provides it with a timer
-        to keep track of the connection status of the rover.
-        """
-
-        # initialize heartbeat node
         super().__init__("heartbeat_node")
 
-        # print node name [debug purpose]
-        self.get_logger().info(colorStr("Launching heartbeat_node", ColorCodes.BLUE_OK))
-
-        # robot interface: send data
-        # robot info: retrieve data
-        # self._robot_info = RobotInfo(self)
         self._robot_interface = RobotInterface(self)
 
-        # give enough time (10s) for others to initialize
-        time.sleep(10)
-
-        # flag to store connection status; starts "lost" until the first heartbeat arrives
+        # starts "lost" until the first heartbeat arrives
         self._connection_lost = True
 
-        # create subscription to mission control
         self._is_alive_subscriber = self.create_subscription(
-            Bool,  # message type (might change later)
-            "/heartbeat",  # topic name
-            self.heartbeat_callback,  # callback function
-            10,  # Quality of Service (QoS) profile
+            Bool, "/heartbeat", self.heartbeat_callback, 10
         )
+        self._is_alive_publisher = self.create_publisher(Bool, "/hbr", 10)
 
-        self._is_alive_publisher = self.create_publisher(
-            Bool,  # message type (might change later)
-            "/hbr",  # topic name
-            10,  # Quality of Service (QoS) profile
-        )
-
-        # store the most recent hearbeat time
         self._last_heartbeat_time = time.time()
-
-        # check connection every 1 second
         self._timer = self.create_timer(1.0, self.check_connection)
 
+        self._status = StatusReporter(self, "heartbeat")
+        self._status.ok("awaiting mission control")
+
     def heartbeat_callback(self, msg: Bool) -> None:
-        """
-        A call back method for the heartbeat everytime the
-        mission control publish a message indicating that the
-        connection is still active.
-
-        Args:
-            msg (Bool): a ROS message type retrieved from the
-                        publisher that indicates the connection
-                        status.
-        """
-
-        # self.get_logger().info("heartbeat call back")
-
-        # Update the timestamp of the last received heartbeat message
         self._last_heartbeat_time = time.time()
 
-        # doesn't matter the data, pub always pub True
-        # just check to make sure nothing is wrong with pub
+        # the data is always True, so this only checks the publisher is sane
         if msg.data:
-            # Only log at INFO on the transition into a connected state (startup or
-            # reconnect); the recurring per-second tick goes to DEBUG so it doesn't
-            # flood the default INFO output.
+            # INFO on the way into a connected state, DEBUG for the per-second tick
             if self._connection_lost:
-                self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self.get_logger().info(color_str("Connection active", ColorCodes.GREEN_OK))
+                self._status.ok("mission control connected")
                 self._connection_lost = False
             else:
-                self.get_logger().debug(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self.get_logger().debug(color_str("Connection active", ColorCodes.GREEN_OK))
 
-        # Tell the client that the heartbeat was received.
+        # tell the client the heartbeat was received
         msg = Bool()
         msg.data = True
         self._is_alive_publisher.publish(msg)
 
     def check_connection(self) -> None:
-        """
-        A method for checking the connection status. If the heartbeat
-        does not receive a message within 1s, meaning the connection was
-        lost, then it will shut down all motors.
-        """
-
-        # Check if the last heartbeat was received more than a threshold ago
-        if time.time() - self._last_heartbeat_time > 2:  # threshold = 2 seconds
-            # if already shut down motor, don't have to do this again
+        if time.time() - self._last_heartbeat_time > HEARTBEAT_TIMEOUT_SEC:
+            # the motors are already stopped, nothing to do again
             if self._connection_lost:
                 return
 
-            self.get_logger().warning(colorStr("Connection lost", ColorCodes.WARNING_YELLOW))
+            self.get_logger().warning(color_str("Connection lost", ColorCodes.WARNING_YELLOW))
+            self._status.degraded("mission control lost, motors stopped")
             self._connection_lost = True
-
-            # call the robot interface to stop all motors
             self._stop_all_motors()
 
-    # ***************
-    # Private helper method
-    # ***************
     def _stop_all_motors(self) -> None:
-        """
-        Get all motors from the motor configs file and stop all of them.
-        """
-
-        # get all the motors from configs.py
-        all_motors = configs.MotorConfigs.getAllMotors()
-
-        # loop through each motor and stop it via the robot interface
+        all_motors = configs.MotorConfigs.get_all_motors()
         for motor in all_motors:
-            self._robot_interface.stopMotor(motor)
+            self._robot_interface.stop_motor(motor)
 
-            # debug message
-            self.get_logger().info(
-                colorStr("Stop motor can id" + str(motor.can_id), ColorCodes.FAIL_RED)
-            )
-
-        # finish [debug message]
-        self.get_logger().info(colorStr("Stop all motors!", ColorCodes.FAIL_RED))
+        # one line rather than one per motor: connection loss is routine in the field, and
+        # 12 lines of it buried everything else that mattered at the same moment
+        can_ids = " ".join(str(motor.can_id) for motor in all_motors)
+        self.get_logger().warning(
+            color_str(f"stopped all {len(all_motors)} motors ({can_ids})", ColorCodes.FAIL_RED)
+        )
 
 
 def main(args: list[str] | None = None) -> None:
-    rclpy.init(args=args)
-    heartbeat_node = Heartbeat()
-    rclpy.spin(heartbeat_node)
-
-    heartbeat_node.destroy_node()
-    rclpy.shutdown()
+    run_nodes(Heartbeat, args=args)
 
 
 if __name__ == "__main__":

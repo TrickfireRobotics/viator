@@ -7,12 +7,21 @@
   <maintainer email="tfrbtcs@uw.edu">trickfire</maintainer>
   <license>Apache-2.0</license>
 
-  <exec_depend>can_moteus</exec_depend>
-  <exec_depend>can_rmdx8</exec_depend>
   <exec_depend>ros2launch</exec_depend>
-  <exec_depend>mission_control_updater</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+
+  <!-- nodes -->
   <exec_depend>arm</exec_depend>
   <exec_depend>camera</exec_depend>
+  <exec_depend>can_moteus</exec_depend>
+  <exec_depend>can_rmdx8</exec_depend>
+  <exec_depend>drivebase</exec_depend>
+  <exec_depend>heartbeat</exec_depend>
+  <exec_depend>mission_control_updater</exec_depend>
+  <exec_depend>supervisor</exec_depend>
+  <exec_depend>rosapi</exec_depend>
+  <exec_depend>rosbridge_server</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

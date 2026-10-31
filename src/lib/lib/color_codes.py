@@ -26,7 +26,7 @@ class ColorCodes(str, Enum):
     UNDERLINE = "\033[4m"
 
 
-def colorStr(text: str, color: ColorCodes) -> str:
+def color_str(text: str, color: ColorCodes) -> str:
     """
     Colors the given string with the given color when printed to console
 

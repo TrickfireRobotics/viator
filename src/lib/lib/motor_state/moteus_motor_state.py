@@ -51,7 +51,7 @@ class MoteusMotorState(CANMotorState["MoteusMotorState"]):
     """
 
     @classmethod
-    def fromMoteusData(cls, can_id: int, moteus_result: Result) -> "MoteusMotorState":
+    def from_moteus_data(cls, can_id: int, moteus_result: Result) -> "MoteusMotorState":
         """
         Creates a MoteusMotorState from a moteus result.
         """

@@ -1,65 +1,107 @@
-import sys
+import time
+from collections.abc import Sequence
 
-import rclpy
-from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from std_msgs.msg import Float32
 
-from lib.color_codes import ColorCodes, colorStr
-from lib.configs import MotorConfigs
+from lib.color_codes import ColorCodes, color_str
+from lib.configs import MotorConfig, MotorConfigs
 from lib.interface.robot_interface import RobotInterface
+from lib.node_runner import run_nodes
+from lib.status import StatusReporter
+
+# how long a drive command stays valid
+# mission control republishes while a stick is held so a gap this long means the stream stopped
+COMMAND_TIMEOUT_SEC = 0.5
+
+WATCHDOG_PERIOD_SEC = 0.1
+
+# mission control sends a normalised stick position, and anything outside it is an
+# upstream bug the drivebase shouldn't amplify into a surprising wheel speed
+MAX_INPUT = 1.0
+
+
+def _clamp(value: float, limit: float) -> float:
+    return max(-limit, min(limit, value))
 
 
 class Drivebase(Node):
     SPEED = 6.28 * 1.5
 
+    LEFT_MOTORS = (
+        MotorConfigs.FRONT_LEFT_DRIVE_MOTOR,
+        MotorConfigs.MID_LEFT_DRIVE_MOTOR,
+        MotorConfigs.REAR_LEFT_DRIVE_MOTOR,
+    )
+
+    RIGHT_MOTORS = (
+        MotorConfigs.FRONT_RIGHT_DRIVE_MOTOR,
+        MotorConfigs.MID_RIGHT_DRIVE_MOTOR,
+        MotorConfigs.REAR_RIGHT_DRIVE_MOTOR,
+    )
+
     def __init__(self) -> None:
         super().__init__("drivebase")
-        self.get_logger().info(colorStr("Launching drivebase node", ColorCodes.BLUE_OK))
         self.bot_interface = RobotInterface(self)
 
         self.left_subscription = self.create_subscription(
-            Float32, "move_left_drivebase_side_message", self.moveLeftSide, 10
+            Float32, "move_left_drivebase_side_message", self.move_left_side, 10
         )
         self.right_subscription = self.create_subscription(
-            Float32, "move_right_drivebase_side_message", self.moveRightSide, 10
+            Float32, "move_right_drivebase_side_message", self.move_right_side, 10
         )
 
-    def moveLeftSide(self, msg: Float32) -> None:
-        vel = msg.data * self.SPEED
-        self.bot_interface.runMotorSpeed(MotorConfigs.FRONT_LEFT_DRIVE_MOTOR, vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.MID_LEFT_DRIVE_MOTOR, vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.REAR_LEFT_DRIVE_MOTOR, vel)
+        # starts stopped, so the watchdog stays quiet until the first real command
+        self._stopped = True
+        self._last_command_time = time.monotonic()
+        self._watchdog = self.create_timer(WATCHDOG_PERIOD_SEC, self.check_command_timeout)
 
-    def moveRightSide(self, msg: Float32) -> None:
-        vel = msg.data * self.SPEED
-        self.bot_interface.runMotorSpeed(MotorConfigs.FRONT_RIGHT_DRIVE_MOTOR, -vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.MID_RIGHT_DRIVE_MOTOR, -vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.REAR_RIGHT_DRIVE_MOTOR, -vel)
+        self._status = StatusReporter(self, "drivebase")
+        self._status.ok("awaiting commands")
 
-    def turnLeft(self, msg: Float32) -> None:
-        self.moveLeftSide(msg)
-        self.moveRightSide(-msg)
+    def move_left_side(self, msg: Float32) -> None:
+        self._note_command()
+        self._drive_side(self.LEFT_MOTORS, _clamp(msg.data, MAX_INPUT) * self.SPEED)
 
-    def turnRight(self, msg: Float32) -> None:
-        self.moveLeftSide(-msg)
-        self.moveRightSide(msg)
+    def move_right_side(self, msg: Float32) -> None:
+        self._note_command()
+        self._drive_side(self.RIGHT_MOTORS, -_clamp(msg.data, MAX_INPUT) * self.SPEED)
+
+    def check_command_timeout(self) -> None:
+        # zeroes the wheels when commands stop arriving. heartbeat_node covers mission
+        # control disconnecting; this covers it staying connected with a stalled command
+        # stream, and still works if heartbeat_node itself died. Motors hold their last
+        # setpoint, so without this the rover keeps driving
+        if self._stopped:
+            return
+
+        if time.monotonic() - self._last_command_time <= COMMAND_TIMEOUT_SEC:
+            return
+
+        self._stopped = True
+        self.get_logger().debug(
+            color_str(
+                f"no drive command for {COMMAND_TIMEOUT_SEC}s, zeroing drivebase",
+                ColorCodes.WARNING_YELLOW,
+            )
+        )
+        self._drive_side(self.LEFT_MOTORS, 0.0)
+        self._drive_side(self.RIGHT_MOTORS, 0.0)
+        self._status.ok("stopped, no commands")
+
+    def _note_command(self) -> None:
+        self._last_command_time = time.monotonic()
+        if self._stopped:
+            self._status.ok("driving")
+        self._stopped = False
+
+    def _drive_side(self, motors: Sequence[MotorConfig], velocity: float) -> None:
+        for motor in motors:
+            self.bot_interface.run_motor_speed(motor, velocity)
 
 
 def main(args: list[str] | None = None) -> None:
-    rclpy.init(args=args)
-    try:
-        drivebase = Drivebase()
-        rclpy.spin(drivebase)  # prints callbacks
-    except KeyboardInterrupt:
-        pass
-    except ExternalShutdownException:
-        # Destroy the node explicitly
-        # (optional - otherwise it will be done automatically
-        # when the garbage collector destroys the node object)
-        drivebase.get_logger().info(colorStr("Shutting down drivebase", ColorCodes.BLUE_OK))
-        drivebase.destroy_node()
-        sys.exit(0)
+    run_nodes(Drivebase, args=args)
 
 
 if __name__ == "__main__":

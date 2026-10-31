@@ -29,8 +29,8 @@ class MoteusMotor:
         self.config = config
         self._ros_node = ros_node
 
-        self._subscriber = self._createSubscriber()
-        self._publisher = self._createPublisher()
+        self._subscriber = self._create_subscriber()
+        self._publisher = self._create_publisher()
 
         # Mutex - used to protect writing/reading the state of the motor
         self.mutex_lock = Lock()
@@ -42,42 +42,38 @@ class MoteusMotor:
         # By default, the motor is shutoff
         self.set_stop = True
 
-    def _createSubscriber(self) -> Subscription:
+    def _create_subscriber(self) -> Subscription:
         """
         The subscriber to get data from.
         The format of the topic is the following: moteusmotor_<can_id>_from_interface
         """
-        topic_name = self.config.getInterfaceTopicName()
-        subscriber = self._ros_node.create_subscription(
+        topic_name = self.config.get_interface_topic_name()
+        return self._ros_node.create_subscription(
             std_msgs.msg.String,
             topic_name,
-            self.dataInCallback,
+            self.data_in_callback,
             1,  # Size of queue is 1. All additional ones are dropped
         )
 
-        return subscriber
-
-    def _createPublisher(self) -> Publisher:
+    def _create_publisher(self) -> Publisher:
         """
         The publisher to send data to.
         The format of the topic is the following: moteusmotor_<can_id>_from_can
         """
-        topic_name = self.config.getCanTopicName()
+        topic_name = self.config.get_can_topic_name()
         # Size of queue is 1. All additional ones are dropped
-        publisher = self._ros_node.create_publisher(std_msgs.msg.String, topic_name, 1)
+        return self._ros_node.create_publisher(std_msgs.msg.String, topic_name, 1)
 
-        return publisher
-
-    def dataInCallback(self, msg: String) -> None:
+    def data_in_callback(self, msg: String) -> None:
         """
         Update the motor state. Mutex protected,
         meaning that no one can go into any other "critical section"
         of code that also has a mutex protecting it.
         """
         with self.mutex_lock:
-            self.run_settings = MoteusRunSettings.fromJsonMsg(msg)
+            self.run_settings = MoteusRunSettings.from_json_msg(msg)
 
-    def publishData(self, moteus_data: Result) -> None:
+    def publish_data(self, moteus_data: Result) -> None:
         """
         Publishes the data from the moteus controller
         """
@@ -93,8 +89,8 @@ class MoteusMotor:
                 # https://discord.com/channels/633996205759791104/722434939676786688/1252380387783610428
                 # self._rosNode.get_logger().info(str(moteusData.values.keys()))
 
-                state = MoteusMotorState.fromMoteusData(self.config.can_id, moteus_data)
-                self._publisher.publish(state.toMsg())
+                state = MoteusMotorState.from_moteus_data(self.config.can_id, moteus_data)
+                self._publisher.publish(state.to_msg())
             except Exception as error:  # pylint: disable=broad-exception-caught
                 # This is used to handle any errors in order to prevent the thread from dying
                 # Specifically, when we crtl-c we want the motors to be set_stop(), but if this

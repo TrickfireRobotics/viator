@@ -25,14 +25,14 @@ class RobotInterface:
         self._ros_node = ros_node
         self._publishers: dict[int, Publisher] = {}
 
-        for motor_config in MotorConfigs.getAllMotors():
+        for motor_config in MotorConfigs.get_all_motors():
             if motor_config.can_id is None:
                 continue
             self._publishers[motor_config.can_id] = self._ros_node.create_publisher(
-                String, motor_config.getInterfaceTopicName(), 10
+                String, motor_config.get_interface_topic_name(), 10
             )
 
-    def runMotor(self, motor: MotorConfig, run_settings: CanMotorRunSettings) -> None:
+    def run_motor(self, motor: MotorConfig, run_settings: CanMotorRunSettings) -> None:
         """
         Runs the specified motor with the specified settings.
 
@@ -45,9 +45,9 @@ class RobotInterface:
         """
         if motor.can_id is None:
             return
-        self._publishers[motor.can_id].publish(run_settings.toMsg())
+        self._publishers[motor.can_id].publish(run_settings.to_msg())
 
-    def runMotorSpeed(self, motor: MotorConfig, target_radians_per_second: float) -> None:
+    def run_motor_speed(self, motor: MotorConfig, target_radians_per_second: float) -> None:
         """
         Runs the specified motor with the specified target speed.
 
@@ -58,7 +58,7 @@ class RobotInterface:
         target_radians_per_second: float
             The target speed in radians per second to run the motor.
         """
-        self.runMotor(
+        self.run_motor(
             motor,
             CanMotorRunSettings(
                 position=math.nan,
@@ -67,7 +67,7 @@ class RobotInterface:
             ),
         )
 
-    def runMotorPosition(self, motor: MotorConfig, target_radians: float) -> None:
+    def run_motor_position(self, motor: MotorConfig, target_radians: float) -> None:
         """
         Runs the specified motor to reach the specified position.
 
@@ -78,23 +78,23 @@ class RobotInterface:
         target_radians: float
             The target position in revolutions.
         """
-        self.runMotor(
+        self.run_motor(
             motor, CanMotorRunSettings(position=target_radians * RADIANS_TO_REVS, set_stop=False)
         )
 
-    def stopMotor(self, motor: MotorConfig) -> None:
+    def stop_motor(self, motor: MotorConfig) -> None:
         """
         Stops the specified motor. This will stop the motor in place, not make it go limp unlike
-        `disableMotor()`.
+        `disable_motor()`.
 
         Parameters
         ------
         motor: MotorConfig
             The config of the motor to stop.
         """
-        self.runMotor(motor, CanMotorRunSettings(position=math.nan, velocity=0, set_stop=False))
+        self.run_motor(motor, CanMotorRunSettings(position=math.nan, velocity=0, set_stop=False))
 
-    def disableMotor(self, motor: MotorConfig) -> None:
+    def disable_motor(self, motor: MotorConfig) -> None:
         """
         Disables the specified motor. This essentially turns off the motor, stopping all output and
         making it go limp.
@@ -104,4 +104,4 @@ class RobotInterface:
         motor : MotorConfig
             The config of the motor to disable.
         """
-        self.runMotor(motor, CanMotorRunSettings(velocity=0, set_stop=True))
+        self.run_motor(motor, CanMotorRunSettings(velocity=0, set_stop=True))
