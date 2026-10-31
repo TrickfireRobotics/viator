@@ -5,8 +5,8 @@
     "icon": "Bot",
     "sidebar": [
         { "label": "Getting Started", "slug": "getting-started" },
-        { "label": "Architecture", "slug": "architecture" },
         { "label": "Launching the Rover", "slug": "launching" },
+        { "label": "Architecture", "slug": "architecture" },
         { "label": "Viator Orin", "slug": "orin" }
     ]
 }
