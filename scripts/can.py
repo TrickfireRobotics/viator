@@ -3,8 +3,8 @@
 
 from __future__ import annotations
 
+import argparse
 import re
-import subprocess
 import sys
 import time
 
@@ -16,20 +16,20 @@ SPEED_CMD = "A200000000000000"
 BITRATE = 1_000_000
 MOTOR_IDS = ["155", "156", "157", "158", "159", "15A"]
 
+# the controllers drop commands sent back to back faster than this
+COMMAND_GAP_SEC = 0.1
+
 
 def _can_state() -> str:
-    result = subprocess.run(
-        ["ip", "-details", "link", "show", lib.CAN_IFACE], capture_output=True, text=True
+    match = re.search(
+        r"state (\S+) \(berr-counter",
+        lib.capture(["ip", "-details", "link", "show", lib.CAN_IFACE]),
     )
-    match = re.search(r"state (\S+) \(berr-counter", result.stdout)
     return match.group(1) if match else ""
 
 
 def _tx_packets() -> int:
-    result = subprocess.run(
-        ["ip", "-s", "link", "show", lib.CAN_IFACE], capture_output=True, text=True
-    )
-    lines = result.stdout.splitlines()
+    lines = lib.capture(["ip", "-s", "link", "show", lib.CAN_IFACE]).splitlines()
     for i, line in enumerate(lines):
         if line.strip().startswith("TX:") and i + 1 < len(lines):
             fields = lines[i + 1].split()
@@ -39,7 +39,14 @@ def _tx_packets() -> int:
 
 
 def main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="make can-setup", description=__doc__)
+    parser.add_argument(
+        "--bitrate", type=int, default=BITRATE, help=f"bus bitrate in bit/s (default {BITRATE})"
+    )
+    args = parser.parse_args(argv)
+
     lib.require_orin()
+    lib.require_commands("ip", "modprobe", "cansend")
     lib.section(lib.CAN_IFACE)
 
     for module in ("can", "can_raw", "mttcan"):
@@ -49,24 +56,28 @@ def main(argv: list[str]) -> None:
         lib.note("the transceiver likely isn't powered, check 'ip link show' and dmesg")
         lib.die(f"{lib.CAN_IFACE} cannot be found")
 
-    subprocess.run(["sudo", "ip", "link", "set", lib.CAN_IFACE, "down"])
+    # down first, because bitrate can only be set on a link that isn't up. It is allowed
+    # to fail: the link may already be down, which is not a problem
+    lib.run(["sudo", "ip", "link", "set", lib.CAN_IFACE, "down"])
     lib.run_checked(
-        ["sudo", "ip", "link", "set", lib.CAN_IFACE, "type", "can", "bitrate", str(BITRATE)]
+        ["sudo", "ip", "link", "set", lib.CAN_IFACE, "type", "can", "bitrate", str(args.bitrate)]
     )
     lib.run_checked(["sudo", "ip", "link", "set", lib.CAN_IFACE, "up"])
-    lib.info(f"up at {BITRATE} bit/s")
+    lib.info(f"up at {args.bitrate} bit/s")
 
     tx_before = _tx_packets()
 
     for motor_id in MOTOR_IDS:
         for cmd in (CLEAR_CMD, START_CMD, SPEED_CMD):
             lib.run_checked(["sudo", "cansend", lib.CAN_IFACE, f"{motor_id}#{cmd}"])
-            time.sleep(0.1)
+            time.sleep(COMMAND_GAP_SEC)
         lib.note(f"0x{motor_id} cleared, started, speed mode")
 
     tx_sent = _tx_packets() - tx_before
     state = _can_state()
 
+    # cansend exits 0 once the frame is queued, so the counters are what actually say
+    # whether anything reached the wire
     if state == "BUS-OFF" or tx_sent == 0:
         lib.die(
             f"transmitted {tx_sent} frames in state {state or 'UNKNOWN'}, "

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -10,14 +11,24 @@ import _lib as lib
 
 
 def main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="make build", description=__doc__)
+    parser.add_argument(
+        "--release",
+        action="store_true",
+        help="build with optimizations instead of debug symbols",
+    )
+    args = parser.parse_args(argv)
+
     if not lib.in_container():
         lib.delegate_to_container("./scripts/build.py", *argv)
 
-    os.chdir(lib.REPO_ROOT)
-
     ros_distro = os.environ.get("ROS_DISTRO", "")
+    if not ros_distro:
+        lib.die("ROS_DISTRO isn't set, so this isn't a ROS environment")
     lib.source_bash_env(f"/opt/ros/{ros_distro}/setup.bash")
 
+    build_type = "Release" if args.release else "Debug"
+    os.chdir(lib.REPO_ROOT)
     os.execvp(
         "colcon",
         [
@@ -27,7 +38,7 @@ def main(argv: list[str]) -> None:
             "--base-paths",
             ".",
             "--cmake-args",
-            "-DCMAKE_BUILD_TYPE=Debug",
+            f"-DCMAKE_BUILD_TYPE={build_type}",
         ],
     )
 

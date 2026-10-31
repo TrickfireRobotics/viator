@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Shared helpers for the scripts in here."""
+"""shared helpers for the scripts"""
 
 from __future__ import annotations
 
 import os
-import platform
 import re
 import shlex
 import shutil
@@ -12,17 +11,23 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import NoReturn
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-COMPOSE_FILE = REPO_ROOT / ".devcontainer" / "docker-compose.yml"
+COMPOSE_DIR = REPO_ROOT / ".devcontainer"
+COMPOSE_FILE = COMPOSE_DIR / "docker-compose.yml"
+COMPOSE_ROVER_FILE = COMPOSE_DIR / "docker-compose.rover.yml"
 COMPOSE_SERVICE = "viator"
 LAUNCH_LOG_DIR = REPO_ROOT / "log"
-LAUNCH_LOG = LAUNCH_LOG_DIR / "launch-latest.log"
+LAUNCH_LOG_LATEST = LAUNCH_LOG_DIR / "launch-latest.log"
+BAG_DIR = REPO_ROOT / "log" / "bags"
 STATUS_EXECUTABLE = REPO_ROOT / "install" / "supervisor" / "lib" / "supervisor" / "viator_status"
 
 CAN_IFACE = os.environ.setdefault("CAN_IFACE", "can0")
+
+PROBE_TIMEOUT_SEC = 20.0
 
 # ----------------------------------- output --------------------------------- #
 
@@ -43,22 +48,6 @@ else:
     C_RED = C_GREEN = C_YELLOW = C_DIM = C_BOLD = C_OFF = ""
 
 
-def red(text: str) -> str:
-    return f"{C_RED}{text}{C_OFF}"
-
-
-def green(text: str) -> str:
-    return f"{C_GREEN}{text}{C_OFF}"
-
-
-def dim(text: str) -> str:
-    return f"{C_DIM}{text}{C_OFF}"
-
-
-def bold(text: str) -> str:
-    return f"{C_BOLD}{text}{C_OFF}"
-
-
 def _now_micros() -> int:
     return int(time.time() * 1_000_000)
 
@@ -73,8 +62,6 @@ def _stamp() -> str:
 
 
 _tag = "viator"
-PASS_COUNT = 0
-FAIL_COUNT = 0
 
 
 def _say(msg: str) -> None:
@@ -108,16 +95,13 @@ def banner(msg: str) -> None:
     _say(f"{C_BOLD}{msg}{C_OFF}")
 
 
+# reads better than info() at a call site that is reporting a check that passed
 def ok(msg: str, detail: str = "") -> None:
-    global PASS_COUNT
     info(msg, detail)
-    PASS_COUNT += 1
 
 
 def bad(msg: str, detail: str = "") -> None:
-    global FAIL_COUNT
     _say(_with_detail(f"{C_RED}error:{C_OFF} {msg}", detail))
-    FAIL_COUNT += 1
 
 
 def die(msg: str, code: int = 1) -> NoReturn:
@@ -128,6 +112,50 @@ def die(msg: str, code: int = 1) -> NoReturn:
 def quote(text: str) -> None:
     for line in text.splitlines():
         print(f"  {C_DIM}{line}{C_OFF}")
+
+
+# -------------------------------- subprocesses ------------------------------ #
+#
+# Four shapes, so no call site has to think about subprocess kwargs or decoding:
+#   run       - let the child write to this terminal, hand back its exit code
+#   run_checked - the same, but a non-zero exit is fatal
+#   probe     - did it succeed, output discarded
+#   capture   - its stdout as stripped text, "" if it could not run
+
+
+def run(argv: Sequence[str], *, cwd: Path | None = None, timeout: float | None = None) -> int:
+    try:
+        return subprocess.run(argv, cwd=cwd, timeout=timeout, check=False).returncode
+    except FileNotFoundError:
+        die(f"{argv[0]} isn't installed")
+    except subprocess.TimeoutExpired as expired:
+        die(f"`{shlex.join(argv)}` took longer than {expired.timeout:g}s")
+
+
+def run_checked(
+    argv: Sequence[str], *, cwd: Path | None = None, timeout: float | None = None
+) -> None:
+    status = run(argv, cwd=cwd, timeout=timeout)
+    if status != 0:
+        die(f"`{shlex.join(argv)}` failed (exit {status})")
+
+
+def probe(argv: Sequence[str], *, cwd: Path | None = None, timeout: float | None = None) -> bool:
+    try:
+        result = subprocess.run(argv, cwd=cwd, timeout=timeout, capture_output=True, check=False)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def capture(argv: Sequence[str], *, cwd: Path | None = None, timeout: float | None = None) -> str:
+    try:
+        result = subprocess.run(
+            argv, cwd=cwd, timeout=timeout, capture_output=True, text=True, check=False
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 # -------------------------------- environment ------------------------------- #
@@ -141,34 +169,46 @@ def require_command(name: str) -> bool:
     return shutil.which(name) is not None
 
 
-def run_checked(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-    result = subprocess.run(argv, **kwargs)  # type: ignore[call-overload]
-    if result.returncode != 0:
-        die(f"`{' '.join(argv)}` failed (exit {result.returncode})")
-    return result
+def require_commands(*names: str) -> None:
+    """Dies listing everything that's missing, rather than one at a time."""
+    missing = [name for name in names if not require_command(name)]
+    if missing:
+        die(f"not installed: {', '.join(missing)}")
+
+
+def compose_files() -> list[Path]:
+    """
+    The base compose file on a dev machine, plus the rover override on the orin.
+
+    The override is what grants privileged mode, host networking and the CAN device, so a
+    laptop that has none of that hardware doesn't ask for any of it. `VIATOR_PROFILE`
+    forces the choice either way, for testing the rover's setup off the rover.
+    """
+    profile = os.environ.get("VIATOR_PROFILE") or ("rover" if is_orin() else "dev")
+    if profile not in ("dev", "rover"):
+        die(f"VIATOR_PROFILE must be 'dev' or 'rover', not {profile!r}")
+    if profile == "rover":
+        return [COMPOSE_FILE, COMPOSE_ROVER_FILE]
+    return [COMPOSE_FILE]
 
 
 def compose_argv(*args: str) -> list[str]:
-    return ["docker", "compose", "-f", str(COMPOSE_FILE), *args]
-
-
-def compose(*args: str, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(compose_argv(*args), **kwargs)  # type: ignore[call-overload]
-
-
-def container_id() -> str:
-    result = compose("ps", "--all", "--quiet", COMPOSE_SERVICE, capture_output=True)
-    lines = result.stdout.decode().strip().splitlines()
-    return lines[0] if lines else ""
+    argv = ["docker", "compose"]
+    for path in compose_files():
+        argv += ["-f", str(path)]
+    return [*argv, *args]
 
 
 def container_running() -> bool:
-    result = compose("ps", "--status", "running", "--quiet", COMPOSE_SERVICE, capture_output=True)
-    return bool(result.stdout.decode().strip())
+    output = capture(
+        compose_argv("ps", "--status", "running", "--quiet", COMPOSE_SERVICE),
+        timeout=PROBE_TIMEOUT_SEC,
+    )
+    return bool(output)
 
 
 def inside_argv(*args: str) -> list[str]:
-    color = "1" if (sys.stdout.isatty() and not os.environ.get("NO_COLOR")) else ""
+    color = "1" if _USE_COLOR else ""
     return compose_argv(
         "exec",
         "-T",
@@ -183,34 +223,33 @@ def inside_argv(*args: str) -> list[str]:
     )
 
 
-def inside_run(*args: str, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
-    return subprocess.run(inside_argv(*args), **kwargs)  # type: ignore[call-overload]
+def inside_run(*args: str) -> int:
+    return run(inside_argv(*args))
 
 
 def delegate_to_container(*args: str) -> NoReturn:
+    """
+    Replaces this process with the same command run inside the container.
+
+    Used by the scripts that need ROS: they're started on the host, notice they aren't in
+    the container, and hand themselves over rather than making you remember to.
+    """
     if not container_running():
         die("the dev container isn't running, start it with 'make launch' or 'make container'")
 
-    tty_args = [] if (sys.stdin.isatty() and sys.stdout.isatty()) else ["-T"]
-
-    os.execvp(
-        "docker",
-        [
-            "docker",
-            "compose",
-            "-f",
-            str(COMPOSE_FILE),
-            "exec",
-            *tty_args,
-            "-e",
-            f"CAN_IFACE={CAN_IFACE}",
-            "-e",
-            f"VIATOR_T0={VIATOR_T0}",
-            COMPOSE_SERVICE,
-            *args,
-        ],
+    interactive = sys.stdin.isatty() and sys.stdout.isatty()
+    argv = compose_argv(
+        "exec",
+        *([] if interactive else ["-T"]),
+        "-e",
+        f"CAN_IFACE={CAN_IFACE}",
+        "-e",
+        f"VIATOR_T0={VIATOR_T0}",
+        COMPOSE_SERVICE,
+        *args,
     )
-    raise AssertionError("unreachable, os.execvp replaces the process")
+
+    os.execvp(argv[0], argv)
 
 
 def status_available() -> bool:
@@ -222,6 +261,7 @@ def source_bash_env(*scripts: str) -> None:
     result = subprocess.run(
         ["bash", "-c", f"set -e; {source_cmds}; env -0"],
         capture_output=True,
+        check=False,
     )
     if result.returncode != 0:
         die(
@@ -241,10 +281,44 @@ def source_workspace() -> None:
         die("the workspace isn't built, run 'make build'")
 
     ros_distro = os.environ.get("ROS_DISTRO", "")
+    if not ros_distro:
+        die("ROS_DISTRO isn't set, so this isn't a ROS environment")
     source_bash_env(f"/opt/ros/{ros_distro}/setup.bash", str(setup_bash))
 
     os.environ["RCUTILS_COLORIZED_OUTPUT"] = "1"
     os.environ["RCUTILS_CONSOLE_OUTPUT_FORMAT"] = "[{severity}] [{name}]: {message}"
+
+
+# ------------------------------- launch logging ----------------------------- #
+
+
+def new_launch_log() -> Path:
+    """
+    A timestamped log file for this launch, with `launch-latest.log` pointed at it.
+
+    One file per launch, because the interesting failure is regularly the one before the
+    launch you're looking at. The symlink is what you tail when you don't care which.
+    """
+    LAUNCH_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    path = LAUNCH_LOG_DIR / f"launch-{time.strftime('%Y%m%d-%H%M%S')}.log"
+
+    # relative target, so the symlink survives the repo being rsynced to the rover
+    tmp_link = LAUNCH_LOG_LATEST.with_suffix(".log.tmp")
+    tmp_link.unlink(missing_ok=True)
+    try:
+        tmp_link.symlink_to(path.name)
+        tmp_link.replace(LAUNCH_LOG_LATEST)
+    except OSError:
+        # a filesystem without symlinks is not worth failing a launch over
+        pass
+
+    return path
+
+
+def prune_launch_logs(keep: int) -> None:
+    logs = sorted(LAUNCH_LOG_DIR.glob("launch-2*.log"))
+    for path in logs[: max(0, len(logs) - keep)]:
+        path.unlink(missing_ok=True)
 
 
 # --------------------------------- platform --------------------------------- #
@@ -260,25 +334,6 @@ def is_orin() -> bool:
     return "jetson" in model.lower() or "tegra" in model.lower()
 
 
-def platform_name() -> str:
-    if is_orin():
-        try:
-            model = (
-                Path("/proc/device-tree/model")
-                .read_bytes()
-                .replace(b"\x00", b"")
-                .decode(errors="ignore")
-            )
-            if model:
-                return model
-        except OSError:
-            pass
-    try:
-        return platform.freedesktop_os_release().get("PRETTY_NAME", platform.system())
-    except OSError:
-        return platform.system()
-
-
 def require_orin() -> None:
     if not is_orin():
         die("run this on the orin!")
@@ -289,34 +344,20 @@ def require_not_orin() -> None:
         die("run this on your pc!")
 
 
-def require_root(argv: list[str]) -> None:
+def require_root(argv: Sequence[str]) -> None:
     if os.geteuid() == 0:
         return
     if os.environ.get("_VIATOR_REEXECED"):
         die("still not root after sudo, check your sudo config")
     os.environ["_VIATOR_REEXECED"] = "1"
     os.execvp("sudo", ["sudo", sys.executable, sys.argv[0], *argv])
-    raise AssertionError("unreachable, os.execvp replaces the process")
 
 
 # ---------------------------------- CAN bus --------------------------------- #
 
 
 def can_exists() -> bool:
-    return subprocess.run(["ip", "link", "show", CAN_IFACE], capture_output=True).returncode == 0
-
-
-def can_is_up() -> bool:
-    result = subprocess.run(["ip", "link", "show", CAN_IFACE], capture_output=True, text=True)
-    return "state UP" in result.stdout
-
-
-def can_bitrate() -> str:
-    result = subprocess.run(
-        ["ip", "-details", "link", "show", CAN_IFACE], capture_output=True, text=True
-    )
-    match = re.search(r"(?<![\w-])bitrate (\d+)", result.stdout)
-    return match.group(1) if match else ""
+    return probe(["ip", "link", "show", CAN_IFACE])
 
 
 # ------------------------------ long-running work --------------------------- #
@@ -353,6 +394,12 @@ def _pane_lines(log_path: Path, width: int, count: int) -> list[str]:
     return [line[:width] for line in lines[-count:]]
 
 
+def show_cursor() -> None:
+    if _USE_COLOR:
+        sys.stdout.write("\033[?25h")
+        sys.stdout.flush()
+
+
 def _paint_step(
     stamp: str, label: str, log_path: Path, drawn: int, width: int, elapsed: int
 ) -> int:
@@ -374,22 +421,27 @@ def _paint_step(
     return PANE_HEIGHT + 1
 
 
-def _run_step_verbose(label: str, argv: list[str], **popen_kwargs: object) -> int:
+def _run_step_verbose(label: str, argv: Sequence[str]) -> int:
     started = time.monotonic()
     note(f"{label} running")
 
-    result = subprocess.run(argv, **popen_kwargs)  # type: ignore[call-overload]
+    status = run(argv)
     elapsed = int(time.monotonic() - started)
-    if result.returncode == 0:
+    if status == 0:
         ok(label, f"done in {elapsed}s")
     else:
-        bad(label, f"exited {result.returncode}")
-    return int(result.returncode)
+        bad(label, f"exited {status}")
+    return status
 
 
-def run_step(label: str, argv: list[str], **popen_kwargs: object) -> int:
+def run_step(label: str, argv: Sequence[str]) -> int:
+    """
+    Runs a long job under a six-line pane of its own tail, collapsing to one line when it
+    finishes. Falls back to plain streaming when the output isn't a terminal or
+    `VIATOR_VERBOSE=1` asks for it.
+    """
     if os.environ.get("VIATOR_VERBOSE") == "1" or not sys.stdout.isatty():
-        return _run_step_verbose(label, argv, **popen_kwargs)
+        return _run_step_verbose(label, argv)
 
     started = time.monotonic()
     drawn = 0
@@ -398,41 +450,40 @@ def run_step(label: str, argv: list[str], **popen_kwargs: object) -> int:
 
     fd, log_name = tempfile.mkstemp(prefix="viator-step.")
     log_path = Path(log_name)
+    keep_log = False
 
-    with os.fdopen(fd, "wb") as log_f:
-        proc = subprocess.Popen(
-            argv,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            **popen_kwargs,  # type: ignore[call-overload]
-        )
+    try:
+        with os.fdopen(fd, "wb") as log_f:
+            try:
+                proc = subprocess.Popen(argv, stdout=log_f, stderr=subprocess.STDOUT)
+            except FileNotFoundError:
+                die(f"{argv[0]} isn't installed")
 
-        sys.stdout.write("\033[?25l")
-        while proc.poll() is None:
-            drawn = _paint_step(
-                stamp, label, log_path, drawn, width, int(time.monotonic() - started)
-            )
-            time.sleep(0.1)
+            sys.stdout.write("\033[?25l")
+            try:
+                while proc.poll() is None:
+                    drawn = _paint_step(
+                        stamp, label, log_path, drawn, width, int(time.monotonic() - started)
+                    )
+                    time.sleep(0.1)
+            finally:
+                if drawn > 0:
+                    sys.stdout.write(f"\033[{drawn}A\033[J")
+                show_cursor()
 
-        if drawn > 0:
-            sys.stdout.write(f"\033[{drawn}A\033[J")
-        sys.stdout.write("\033[?25h")
-        sys.stdout.flush()
+        status = proc.returncode
+        elapsed = int(time.monotonic() - started)
+        packages = len(re.findall(r"^Finished <<<", log_path.read_text(errors="replace"), re.M))
 
-    status = proc.returncode
-    elapsed = int(time.monotonic() - started)
-    log_text = log_path.read_text(errors="replace")
-    packages = len(re.findall(r"^Finished <<<", log_text, re.MULTILINE))
+        if status != 0:
+            bad(label, f"exited {status}")
+            quote("\n".join(_pane_lines(log_path, width - 2, FAILURE_TAIL_LINES)))
+            note(f"full output in {log_path}")
+            keep_log = True
+            return status
 
-    if status != 0:
-        bad(label, f"exited {status}")
-        quote("\n".join(_pane_lines(log_path, width - 2, FAILURE_TAIL_LINES)))
-        note(f"full output in {log_path}")
-        return status
-
-    if packages > 0:
-        ok(label, f"{packages} packages in {elapsed}s")
-    else:
-        ok(label, f"done in {elapsed}s")
-    log_path.unlink(missing_ok=True)
-    return 0
+        ok(label, f"{packages} packages in {elapsed}s" if packages else f"done in {elapsed}s")
+        return 0
+    finally:
+        if not keep_log:
+            log_path.unlink(missing_ok=True)
