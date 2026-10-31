@@ -1,0 +1,11 @@
+# gets overlayed over the base compose
+# for the physical rover
+services:
+    viator:
+        build:
+            target: rover
+        image: viator:rover
+
+        privileged: true
+        security_opt:
+            - seccomp:unconfined

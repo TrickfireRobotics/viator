@@ -9,10 +9,47 @@ fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 select = [
+    "F",   # pyflakes: undefined names, unused imports
     "E",   # pycodestyle errors
     "W",   # pycodestyle warnings
     "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # bugbear: likely bugs and footguns
+    "A",   # shadowing a builtin
+    "C4",  # comprehension rewrites
+    "SIM", # simplifiable code
+    "RET", # return-path cleanups
+    "PTH", # use pathlib instead of os.path
+    "ARG", # unused arguments
+    "TID", # tidy imports: no relative imports
     "RUF", # ruff-specific rules
+]
+ignore = [
+    # ROS callbacks and launch hooks take arguments we don't use but can't drop
+    "ARG002",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# setuptools' data_files wants plain strings and glob() is the documented idiom, so
+# pathlib here would be a translation layer for nothing
+"src/*/setup.py" = ["PTH118", "PTH207"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "arm",
+    "camera",
+    "can_moteus",
+    "can_rmdx8",
+    "custom_interfaces",
+    "drivebase",
+    "heartbeat",
+    "lib",
+    "mission_control_updater",
+    "supervisor",
 ]
 
 [tool.ruff.format]
@@ -22,3 +59,20 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
+
+[tool.mypy]
+# `import _lib` from the scripts only resolves with scripts/ on the search path. Without
+# it every lib.* call in scripts/ silently types as Any, which hid real errors.
+mypy_path = "scripts"
+explicit_package_bases = true
+ignore_missing_imports = true
+
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+
+exclude = ["vision_opencv/", "/setup\\.py$", "\\.launch\\.py$", "/test/"]

@@ -4,7 +4,7 @@ configs.
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -25,7 +25,7 @@ class MotorConfig:
     A dataclass that contains config values relating to motors connected via the can bus.
     """
 
-    can_id: int | None = None
+    can_id: int
     """
     The can id of the motor.
     """
@@ -51,7 +51,7 @@ class MotorConfig:
     RMD settings can be completely controled by run settings
     """
 
-    def getCanTopicName(self) -> str:
+    def get_can_topic_name(self) -> str:
         """
         Gets the motor's topic name for data sourced from can.
 
@@ -59,7 +59,7 @@ class MotorConfig:
         """
         return f"this_is_wrong_if_youre_seeing_this_{self.can_id}_from_can"
 
-    def getInterfaceTopicName(self) -> str:
+    def get_interface_topic_name(self) -> str:
         """
         Gets the motor's topic name for data sourced from robot interface.
 
@@ -79,10 +79,10 @@ class MoteusMotorConfig(MotorConfig):
         # Can't use simple assignment since class is frozen
         object.__setattr__(self, "motor_type", MotorTypes.MOTEUSMOTOR)
 
-    def getCanTopicName(self) -> str:
+    def get_can_topic_name(self) -> str:
         return f"moteusmotor_{self.can_id}_from_can"
 
-    def getInterfaceTopicName(self) -> str:
+    def get_interface_topic_name(self) -> str:
         return f"moteusmotor_{self.can_id}_from_interface"
 
 
@@ -96,14 +96,14 @@ class RMDx8MotorConfig(MotorConfig):
     def __post_init__(self) -> None:
         object.__setattr__(self, "motor_type", MotorTypes.RMDX8MOTOR)
 
-    def getCanTopicName(self) -> str:
+    def get_can_topic_name(self) -> str:
         """
         Gets the motor's topic name for data sourced from can.
         Returns the following format: 'rmdx8motor_<can_id>_from_can'
         """
         return f"rmdx8motor_{self.can_id}_from_can"
 
-    def getInterfaceTopicName(self) -> str:
+    def get_interface_topic_name(self) -> str:
         """
         Gets the motor's topic name for data sourced from robot interface.
         Returns the following format: 'rmdx8motor_<can_id>_from_interface'
@@ -170,7 +170,7 @@ class MotorConfigs:
         raise AttributeError("Trying to set attribute on a frozen instance")
 
     @classmethod
-    def getAllMotors(cls) -> list[MotorConfig]:
+    def get_all_motors(cls) -> list[MotorConfig]:
         """
         Returns a list of every motor in this constants class.
         """
@@ -178,5 +178,5 @@ class MotorConfigs:
         return [
             value
             for key, value in cls.__dict__.items()
-            if not key.startswith("_") and key != "getAllMotors"
+            if not key.startswith("_") and key != "get_all_motors"
         ]

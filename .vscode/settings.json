@@ -1,11 +1,16 @@
 {
     "editor.rulers": [100],
     "files.associations": {
-        "*.tcc": "cpp"
+        "*.tcc": "cpp",
+        "*.sudoers": "plaintext"
     },
     "files.exclude": {
+        "**/node_modules": true,
         "**/.mypy_cache": true,
-        "**/.ruff_cache": true
+        "**/.ruff_cache": true,
+        "**/.pytest_cache": true,
+        "**/__pycache__": true,
+        "**/.venv": true
     },
 
     /* ------------------------------- formatting ------------------------------- */
@@ -17,35 +22,18 @@
             "source.organizeImports": "explicit"
         }
     },
-    "shfmt.executablePath": "/usr/local/bin/shfmt",
     "[shellscript]": {
-        "editor.defaultFormatter": "mkhl.shfmt",
-        "editor.formatOnSave": true
-    },
-    "[mdx]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "[json]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
-    },
-    "[jsonc]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode",
-        "editor.formatOnSave": true
+        "editor.detectIndentation": false,
+        "editor.insertSpaces": true,
+        "editor.tabSize": 4
     },
 
     /* --------------------------------- python --------------------------------- */
 
-    "python.autoComplete.extraPaths": [
-        "/opt/ros/humble/lib/python3.10/site-packages",
-        "./src",
-        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
-    ],
     "python.analysis.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
-        "./src",
-        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
 
     "python.analysis.diagnosticSeverityOverrides": {
@@ -66,5 +54,5 @@
     /* ----------------------------------- cpp ---------------------------------- */
 
     "cmake.configureOnOpen": false,
-    "cmake.sourceDirectory": "${workspaceFolder}/src/hello_world"
+    "cmake.sourceDirectory": "${workspaceFolder}/src/custom_interfaces"
 }

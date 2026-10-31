@@ -72,20 +72,6 @@ alias rnl='ros2 node list'
 alias rsl='ros2 service list'
 alias rs='_ros_source_env'
 
-# colcon
-alias cb='colcon build --symlink-install --base-paths "$ROS_WS" --cmake-args -DCMAKE_BUILD_TYPE=Debug'
-
-# ruff
-alias rf='ruff check .'
-alias rff='ruff check . --fix'
-alias rfmt='ruff format .'
-
-# ---------- helper functions ----------
-ros-clean() {
-    rm -rf "${ROS_WS}/build" "${ROS_WS}/install" "${ROS_WS}/log"
-    echo "Cleaned build/install/log from ${ROS_WS}"
-}
-
 # ---------- bash completion ----------
 if ! shopt -oq posix; then
     if [ -f /usr/share/bash-completion/bash_completion ]; then

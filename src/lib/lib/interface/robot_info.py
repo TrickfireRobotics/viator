@@ -3,7 +3,8 @@ This module just contains the RobotInfo class. It provides utility functions to 
 motor on the robot.
 """
 
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 from rclpy.node import Node
 from rclpy.subscription import Subscription
@@ -25,20 +26,21 @@ class RobotInfo:  # pylint: disable=too-few-public-methods
         self.sub_list: list[Subscription] = []  # empty array
         self.can_id_to_json: dict[int, CANMotorState] = {}
 
-        for motor_config in MotorConfigs.getAllMotors():
+        for motor_config in MotorConfigs.get_all_motors():
             if motor_config.can_id is None or motor_config.motor_type == MotorTypes.NONE:
                 continue
             self._ros_node.create_subscription(
                 String,
-                motor_config.getCanTopicName(),
-                self._createSubCallback(motor_config.motor_type),
+                motor_config.get_can_topic_name(),
+                self._create_sub_callback(motor_config.motor_type),
                 10,
             )
             self.can_id_to_json[motor_config.can_id] = CANMotorState()
 
-    def _createSubCallback(self, motor_type: MotorTypes) -> Callable[[String], None]:
-        # this is bad code design, but it's so small scale who cares
-        state_cls: type
+    def _create_sub_callback(self, motor_type: MotorTypes) -> Callable[[String], None]:
+        # parameterized with Any because the branches pick different concrete states, and
+        # all we need from either is `from_json_msg`
+        state_cls: type[CANMotorState[Any]]
         if motor_type == MotorTypes.MOTEUSMOTOR:
             state_cls = MoteusMotorState
         elif motor_type == MotorTypes.RMDX8MOTOR:
@@ -46,15 +48,15 @@ class RobotInfo:  # pylint: disable=too-few-public-methods
         else:
             return lambda _: None
 
-        def _subCallback(msg: String) -> None:
-            state = state_cls.fromJsonMsg(msg)
+        def _sub_callback(msg: String) -> None:
+            state = state_cls.from_json_msg(msg)
             if state.can_id is None:
                 return
             self.can_id_to_json[state.can_id] = state
 
-        return _subCallback
+        return _sub_callback
 
-    def getMotorState(self, motor: MotorConfig) -> CANMotorState:
+    def get_motor_state(self, motor: MotorConfig) -> CANMotorState:
         """
         Gets the state of the motor with the given can_id.
 
