@@ -1,0 +1,16 @@
+build/
+install/
+log/
+
+.git/
+.mypy_cache/
+dist/
+node_modules/
+__pycache__/
+*.pyc
+
+src/vision_opencv/
+
+docs/
+.github/
+.vscode/

@@ -1,30 +1,19 @@
+# the base compose for the devcontainer
+# overlay with the rover compose for rover
 services:
     viator:
         build:
             context: ..
             dockerfile: .devcontainer/Dockerfile
-            target: viator
-        image: viator:latest
+            target: dev
+        image: viator:dev
         container_name: viator
         user: trickfire
 
         volumes:
             - ..:/home/trickfire/viator
-            # - /dev/video0:/dev/video0
-            - type: bind
-              source: ${HOME}/.ssh
-              target: /home/trickfire/.ssh
-              read_only: true
-              bind:
-                  create_host_path: true
 
         working_dir: /home/trickfire/viator
-
         network_mode: host
-
-        privileged: true
-        security_opt:
-            - seccomp:unconfined
-
         stdin_open: true
         tty: true

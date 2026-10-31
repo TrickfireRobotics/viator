@@ -5,6 +5,12 @@
 
 # python
 __pycache__/
+.venv/
+
+# tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # zed
 src/zed-ros2-examples/
