@@ -31,7 +31,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     --mount=type=bind,source=src,target=/tmp/ws/src \
     rosdep init 2>/dev/null || true; \
-    rosdep update --rosdistro "$ROS_DISTRO" \\
+    rosdep update --rosdistro "$ROS_DISTRO" \
     && DEBIAN_FRONTEND=noninteractive apt-get update \
     && rosdep install --from-paths /tmp/ws/src --ignore-src -y --rosdistro "$ROS_DISTRO"
 
