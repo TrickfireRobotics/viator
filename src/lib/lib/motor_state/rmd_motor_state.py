@@ -24,7 +24,7 @@ class RMDX8MotorState(CANMotorState["RMDX8MotorState"]):
     """
 
     @classmethod
-    def fromRMDX8Data(
+    def from_rmdx8_data(
         cls,
         can_id: int,
         motor_status_1: MotorStatus1,

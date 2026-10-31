@@ -4,9 +4,9 @@ from rclpy.node import Node
 from std_msgs.msg import Bool
 
 from lib import configs
-from lib.color_codes import ColorCodes, colorStr
+from lib.color_codes import ColorCodes, color_str
 from lib.interface.robot_interface import RobotInterface
-from lib.node_runner import runNodes
+from lib.node_runner import run_nodes
 from lib.status import StatusReporter
 
 # Credit: Most of this code is credit to Anna. I (Hong) just
@@ -47,11 +47,11 @@ class Heartbeat(Node):
         if msg.data:
             # INFO on the way into a connected state, DEBUG for the per-second tick
             if self._connection_lost:
-                self.get_logger().info(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self.get_logger().info(color_str("Connection active", ColorCodes.GREEN_OK))
                 self._status.ok("mission control connected")
                 self._connection_lost = False
             else:
-                self.get_logger().debug(colorStr("Connection active", ColorCodes.GREEN_OK))
+                self.get_logger().debug(color_str("Connection active", ColorCodes.GREEN_OK))
 
         # tell the client the heartbeat was received
         msg = Bool()
@@ -64,26 +64,26 @@ class Heartbeat(Node):
             if self._connection_lost:
                 return
 
-            self.get_logger().warning(colorStr("Connection lost", ColorCodes.WARNING_YELLOW))
+            self.get_logger().warning(color_str("Connection lost", ColorCodes.WARNING_YELLOW))
             self._status.degraded("mission control lost, motors stopped")
             self._connection_lost = True
             self._stop_all_motors()
 
     def _stop_all_motors(self) -> None:
-        all_motors = configs.MotorConfigs.getAllMotors()
+        all_motors = configs.MotorConfigs.get_all_motors()
         for motor in all_motors:
-            self._robot_interface.stopMotor(motor)
+            self._robot_interface.stop_motor(motor)
 
         # one line rather than one per motor: connection loss is routine in the field, and
         # 12 lines of it buried everything else that mattered at the same moment
         can_ids = " ".join(str(motor.can_id) for motor in all_motors)
         self.get_logger().warning(
-            colorStr(f"stopped all {len(all_motors)} motors ({can_ids})", ColorCodes.FAIL_RED)
+            color_str(f"stopped all {len(all_motors)} motors ({can_ids})", ColorCodes.FAIL_RED)
         )
 
 
 def main(args: list[str] | None = None) -> None:
-    runNodes(Heartbeat, args=args)
+    run_nodes(Heartbeat, args=args)
 
 
 if __name__ == "__main__":

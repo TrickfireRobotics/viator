@@ -12,12 +12,11 @@ from rclpy.node import Node
 from rclpy.subscription import Subscription
 from std_msgs.msg import String
 
+from can_rmdx8.can_health import CanHealth
+from can_rmdx8.rmdx8_motor import RMDx8Motor
 from lib.configs import MotorConfigs, RMDx8MotorConfig
-from lib.node_runner import runNodes
+from lib.node_runner import run_nodes
 from lib.status import StatusReporter
-
-from .can_health import CanHealth
-from .rmdx8_motor import RMDx8Motor
 
 
 class RMDx8MotorManager(Node):
@@ -40,37 +39,37 @@ class RMDx8MotorManager(Node):
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
         self.health = CanHealth(self)
-        self.createRMDx8Motors()
+        self.create_rmdx8_motors()
         # Hardware testing
-        self.create_timer(0.005, self._handleRequests)
+        self.create_timer(0.005, self._handle_requests)
 
         self._status = StatusReporter(self, "can_rmdx8")
-        summary = f"{self.motorCount()} motors on {self._can_iface}"
+        summary = f"{self.motor_count()} motors on {self._can_iface}"
         self._status.ok(summary)
-        self.health.setStatusReporter(self._status, summary)
+        self.health.set_status_reporter(self._status, summary)
         self.get_logger().info(f"can_rmdx8 ready, {summary}")
 
-    def _createSubscriber(self, config: RMDx8MotorConfig) -> Subscription:
+    def _create_subscriber(self, config: RMDx8MotorConfig) -> Subscription:
         can_id = config.can_id
         return self.create_subscription(
             std_msgs.msg.String,
-            config.getInterfaceTopicName(),
+            config.get_interface_topic_name(),
             # We pass the create_request lambda with the
             # capture clause as the motor_id's can id
             # so we know who is making the requests
-            lambda msg: self._createRequest(can_id, msg),
+            lambda msg: self._create_request(can_id, msg),
             1,
             callback_group=ReentrantCallbackGroup(),
         )
 
-    def shutdownMotors(self) -> None:
+    def shutdown_motors(self) -> None:
         """
         Shutdown all motors
         """
         for motor in self._id_to_rmdx8_motor.values():
-            motor.shutdownMotor()
+            motor.shutdown_motor()
 
-    def addMotor(self, config: RMDx8MotorConfig) -> None:
+    def add_motor(self, config: RMDx8MotorConfig) -> None:
         """
         Adds new rmdx8 motor to the motor dictionary
         """
@@ -79,31 +78,31 @@ class RMDx8MotorManager(Node):
             config,
             self.driver,
             self,
-            lambda: self._createRequest(config.can_id, String(data=self._UPDATE_STATE)),
+            lambda: self._create_request(config.can_id, String(data=self._UPDATE_STATE)),
             self._driver_lock,
             self.health,
         )
         self._id_to_rmdx8_motor[config.can_id] = motor
-        self._createSubscriber(config)
+        self._create_subscriber(config)
 
-    def createRMDx8Motors(self) -> None:
+    def create_rmdx8_motors(self) -> None:
         """
         Create all necessary RMDx8 motors and add them to the dictionary
         """
 
-        for config in MotorConfigs.getAllMotors():
+        for config in MotorConfigs.get_all_motors():
             if not isinstance(config, RMDx8MotorConfig):
                 continue
-            self.addMotor(config)
+            self.add_motor(config)
 
-    def _createRequest(self, can_id: int, msg: String) -> None:
+    def _create_request(self, can_id: int, msg: String) -> None:
         """
         Add a request to the ring buffer for later dispatch
         """
         with self._buffer_lock:
             self._req_buffer.append((can_id, msg))
 
-    def _handleRequests(self) -> None:
+    def _handle_requests(self) -> None:
         """
         Drain the ring buffer and dispatch each command to the correct motor
         """
@@ -116,37 +115,37 @@ class RMDx8MotorManager(Node):
             self.get_logger().error(f"Received request for motor {can_id} that doesnt exist")
             return
         if msg.data == self._UPDATE_STATE:
-            motor.publishData()
+            motor.publish_data()
         else:
-            motor.dataInCallback(msg)
+            motor.data_in_callback(msg)
 
-    def motorCount(self) -> int:
+    def motor_count(self) -> int:
         """
         Returns the number of motors
         """
         return len(self._id_to_rmdx8_motor)
 
 
-def _buildExecutor(nodes: Sequence[Node]) -> Executor:
+def _build_executor(nodes: Sequence[Node]) -> Executor:
     # each motor has a timer and a subscriber callback that can run at the same time, so
     # 2 threads per motor, and at least 4 or spin_once crashes
     manager = nodes[0]
     assert isinstance(manager, RMDx8MotorManager)
-    return MultiThreadedExecutor(num_threads=max(2 * manager.motorCount() + 2, 4))
+    return MultiThreadedExecutor(num_threads=max(2 * manager.motor_count() + 2, 4))
 
 
-def _stopMotors(nodes: Sequence[Node]) -> None:
+def _stop_motors(nodes: Sequence[Node]) -> None:
     for node in nodes:
         if isinstance(node, RMDx8MotorManager):
-            node.shutdownMotors()
+            node.shutdown_motors()
 
 
 def main(args: list[str] | None = None) -> None:
-    runNodes(
+    run_nodes(
         RMDx8MotorManager,
         args=args,
-        executor_factory=_buildExecutor,
-        on_shutdown=_stopMotors,
+        executor_factory=_build_executor,
+        on_shutdown=_stop_motors,
     )
 
 

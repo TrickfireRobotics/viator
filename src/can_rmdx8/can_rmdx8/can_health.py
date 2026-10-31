@@ -29,7 +29,7 @@ class CanHealthSnapshot:
         return self.drops == 0 and self.faults == 0 and self.errors == 0
 
 
-def _formatByMotor(counts: dict[int, int]) -> str:
+def _format_by_motor(counts: dict[int, int]) -> str:
     # `m21:48 m22:47`, skipping the motors with nothing to report
     return " ".join(f"m{can_id}:{count}" for can_id, count in sorted(counts.items()) if count)
 
@@ -54,24 +54,24 @@ class CanHealth:
         self._motor_label = ""
         self._timer = ros_node.create_timer(report_period_sec, self.report)
 
-    def setStatusReporter(self, status: StatusReporter, motor_label: str) -> None:
+    def set_status_reporter(self, status: StatusReporter, motor_label: str) -> None:
         self._status = status
         self._motor_label = motor_label
 
-    def recordPoll(self, can_id: int) -> None:
+    def record_poll(self, can_id: int) -> None:
         with self._lock:
             self._polls[can_id] += 1
 
-    def recordDrop(self, can_id: int) -> None:
+    def record_drop(self, can_id: int) -> None:
         with self._lock:
             self._drops[can_id] += 1
 
-    def recordFault(self, can_id: int, detail: str) -> None:
+    def record_fault(self, can_id: int, detail: str) -> None:
         with self._lock:
             self._faults[can_id] += 1
             self._detail_samples[f"fault:{can_id}"] = detail
 
-    def recordError(self, can_id: int, detail: str) -> None:
+    def record_error(self, can_id: int, detail: str) -> None:
         with self._lock:
             self._errors[can_id] += 1
             self._detail_samples[f"error:{can_id}"] = detail
@@ -123,7 +123,7 @@ class CanHealth:
         if snapshot.drops:
             logger.warning(
                 f"CAN degraded: {snapshot.drops}/{snapshot.polls} polls dropped in "
-                f"{snapshot.period_sec:.1f}s ({_formatByMotor(snapshot.drops_by_motor)})"
+                f"{snapshot.period_sec:.1f}s ({_format_by_motor(snapshot.drops_by_motor)})"
             )
 
         if snapshot.faults:
@@ -132,7 +132,7 @@ class CanHealth:
             )
             logger.error(
                 f"CAN controller faults: {snapshot.faults} in {snapshot.period_sec:.1f}s "
-                f"({_formatByMotor(snapshot.faults_by_motor)}) last: {sample}"
+                f"({_format_by_motor(snapshot.faults_by_motor)}) last: {sample}"
             )
 
         if snapshot.errors:
@@ -141,5 +141,5 @@ class CanHealth:
             )
             logger.error(
                 f"CAN errors: {snapshot.errors} in {snapshot.period_sec:.1f}s "
-                f"({_formatByMotor(snapshot.errors_by_motor)}) last: {sample}"
+                f"({_format_by_motor(snapshot.errors_by_motor)}) last: {sample}"
             )

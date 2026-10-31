@@ -23,7 +23,7 @@ NodeFactory = Callable[[], Node | Sequence[Node]]
 ExecutorFactory = Callable[[Sequence[Node]], Executor]
 
 
-def multiThreaded(num_threads: int | None = None) -> ExecutorFactory:
+def multi_threaded(num_threads: int | None = None) -> ExecutorFactory:
     """
     For nodes whose callbacks must run concurrently. `None` sizes the pool from the CPUs.
     """
@@ -34,7 +34,7 @@ def multiThreaded(num_threads: int | None = None) -> ExecutorFactory:
     return build
 
 
-def runNodes(
+def run_nodes(
     factory: NodeFactory,
     *,
     args: list[str] | None = None,

@@ -1,9 +1,13 @@
 """
-`make status`: print what every module says about itself, then exit.
+`viator_status`: print what every module says about itself, then exit.
 
 Same data as the supervisor's readiness line, laid out as a table. It asks and exits
 rather than holding the terminal, so it works at any width, over a link that drops, and
 from a second terminal while the rover is running.
+
+`make launch` runs this with --summary for its readiness banner. Run it by name inside
+the container for the full table, and note that it exits non-zero when the rover isn't
+ready, so it chains: `viator_status && ./some-test`.
 """
 
 import argparse
@@ -15,7 +19,7 @@ import rclpy
 from rclpy.node import Node
 
 from custom_interfaces.msg import NodeStatus
-from lib.color_codes import ColorCodes, colorStr
+from lib.color_codes import ColorCodes, color_str
 from lib.status import MISSING, OK, STALE, STATE_NAMES, StatusWatcher
 
 # long enough for DDS discovery plus one republish cycle, so a healthy rover is never
@@ -35,10 +39,10 @@ _USE_COLOR = (sys.stdout.isatty() or bool(os.environ.get("VIATOR_COLOR"))) and n
 
 
 def _color(text: str, code: ColorCodes) -> str:
-    return colorStr(text, code) if _USE_COLOR else text
+    return color_str(text, code) if _USE_COLOR else text
 
 
-def _labelColor(label: str) -> ColorCodes:
+def _label_color(label: str) -> ColorCodes:
     if label == OK:
         return ColorCodes.GREEN_OK
     if label == STATE_NAMES[NodeStatus.DEGRADED]:
@@ -60,7 +64,7 @@ def _table(watcher: StatusWatcher, now: float) -> list[str]:
     rows = [_color(header.rstrip(), ColorCodes.BOLD)]
 
     for name, label in labels.items():
-        state = _color(label.ljust(state_width), _labelColor(label))
+        state = _color(label.ljust(state_width), _label_color(label))
         detail = watcher.detail(name) if label not in (MISSING, STALE) else ""
         rows.append(gap.join((name.ljust(module_width), state, detail)).rstrip())
 
@@ -71,8 +75,8 @@ def _collect(node: Node, watcher: StatusWatcher, wait_sec: float) -> None:
     deadline = time.monotonic() + wait_sec
     while time.monotonic() < deadline:
         rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_SEC)
-        watcher.pollExternalNodes(time.monotonic())
-        if watcher.allReported():
+        watcher.poll_external_nodes(time.monotonic())
+        if watcher.all_reported():
             return
 
 
@@ -110,11 +114,11 @@ def _watch(node: Node, watcher: StatusWatcher) -> None:
         deadline = time.monotonic() + WATCH_PERIOD_SEC
         while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_SEC)
-        watcher.pollExternalNodes(time.monotonic())
+        watcher.poll_external_nodes(time.monotonic())
 
 
 def main(args: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(prog="make status", description=__doc__)
+    parser = argparse.ArgumentParser(prog="viator_status", description=__doc__)
     parser.add_argument(
         "-w", "--watch", action="store_true", help="redraw once a second until interrupted"
     )

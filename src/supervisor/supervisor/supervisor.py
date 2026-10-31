@@ -11,8 +11,8 @@ import time
 from rclpy.node import Node
 
 from custom_interfaces.msg import NodeStatus
-from lib.color_codes import ColorCodes, colorStr
-from lib.node_runner import runNodes
+from lib.color_codes import ColorCodes, color_str
+from lib.node_runner import run_nodes
 from lib.status import EXPECTED_NODES, OK, STATE_NAMES, StatusWatcher
 
 CHECK_PERIOD_SEC = 1.0
@@ -21,7 +21,7 @@ CHECK_PERIOD_SEC = 1.0
 STARTUP_GRACE_SEC = 15.0
 
 
-def _labelColor(label: str) -> ColorCodes:
+def _label_color(label: str) -> ColorCodes:
     # stale and missing count as failures
     if label == OK:
         return ColorCodes.GREEN_OK
@@ -50,27 +50,27 @@ class Supervisor(Node):
 
     def check(self) -> None:
         now = time.monotonic()
-        self._watcher.pollExternalNodes(now)
+        self._watcher.poll_external_nodes(now)
 
         if not self._summary_printed:
-            if self._watcher.allReported() or now - self._started_at > STARTUP_GRACE_SEC:
-                self._printSummary(now)
+            if self._watcher.all_reported() or now - self._started_at > STARTUP_GRACE_SEC:
+                self._print_summary(now)
                 self._summary_printed = True
                 self._reported_labels = self._watcher.labels(now)
             return
 
-        self._reportChanges(now)
+        self._report_changes(now)
 
-    def _printSummary(self, now: float) -> None:
-        # one line, not a table per module: `make status` prints the table on demand, so
+    def _print_summary(self, now: float) -> None:
+        # one line, not a table per module: `viator_status` prints the table on demand, so
         # the log's job is the moment readiness was decided
         ready, message = self._watcher.summary(now)
         if ready:
-            self.get_logger().info(colorStr(message, ColorCodes.GREEN_OK))
+            self.get_logger().info(color_str(message, ColorCodes.GREEN_OK))
         else:
-            self.get_logger().error(colorStr(message, ColorCodes.FAIL_RED))
+            self.get_logger().error(color_str(message, ColorCodes.FAIL_RED))
 
-    def _reportChanges(self, now: float) -> None:
+    def _report_changes(self, now: float) -> None:
         current = self._watcher.labels(now)
 
         for name, label in current.items():
@@ -80,7 +80,7 @@ class Supervisor(Node):
             detail = self._watcher.detail(name)
             message = f"{name}: {label}" + (f" ({detail})" if detail else "")
 
-            colored = colorStr(message, _labelColor(label))
+            colored = color_str(message, _label_color(label))
             if label == OK:
                 self.get_logger().info(colored)
             elif label == STATE_NAMES[NodeStatus.DEGRADED]:
@@ -92,7 +92,7 @@ class Supervisor(Node):
 
 
 def main(args: list[str] | None = None) -> None:
-    runNodes(Supervisor, args=args)
+    run_nodes(Supervisor, args=args)
 
 
 if __name__ == "__main__":

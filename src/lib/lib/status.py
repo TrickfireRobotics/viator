@@ -6,7 +6,7 @@ constructing, not that it worked. This lets a node say it finished starting up, 
 downgrade itself later, so "is the rover healthy" has one answer.
 
 `StatusWatcher` is the reading half, shared by the supervisor (which watches for the
-whole run) and `make status` (which asks once and exits), so the two can't disagree
+whole run) and `viator_status` (which asks once and exits), so the two can't disagree
 about what counts as ready.
 """
 
@@ -40,7 +40,7 @@ OK = STATE_NAMES[NodeStatus.OK]
 STALE = "stale"
 MISSING = "not reporting"
 
-# Every module the standard bringup starts, in the order `make status` lists them: the
+# Every module the standard bringup starts, in the order `viator_status` lists them: the
 # ones that move the rover first, telemetry last. The supervisor takes an
 # `expected_nodes` parameter to override it, so a partial bringup for bench testing
 # doesn't report false failures.
@@ -132,19 +132,19 @@ class StatusWatcher:
         self._records: dict[str, NodeRecord] = {}
 
         self._subscription = ros_node.create_subscription(
-            NodeStatus, STATUS_TOPIC, self._onStatus, 10
+            NodeStatus, STATUS_TOPIC, self._on_status, 10
         )
 
     @property
     def expected(self) -> list[str]:
         return list(self._expected)
 
-    def _onStatus(self, msg: NodeStatus) -> None:
+    def _on_status(self, msg: NodeStatus) -> None:
         self._records[msg.name] = NodeRecord(
             state=msg.state, detail=msg.detail, last_seen=time.monotonic()
         )
 
-    def pollExternalNodes(self, now: float) -> None:
+    def poll_external_nodes(self, now: float) -> None:
         """
         Marks the third-party nodes present in the graph as ok. Call before reading labels.
         """
@@ -156,7 +156,7 @@ class StatusWatcher:
                     state=NodeStatus.OK, detail="discovered", last_seen=now
                 )
 
-    def allReported(self) -> bool:
+    def all_reported(self) -> bool:
         return all(name in self._records for name in self._expected)
 
     def labels(self, now: float) -> dict[str, str]:
