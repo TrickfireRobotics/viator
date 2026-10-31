@@ -84,18 +84,23 @@ If something didn't make it, that line names what:
 
 ```text
 [  76.088] rover: error: 6/8 modules ready - can_rmdx8 failed, camera not reporting
-[  76.088] rover: 'make status' for the detail
+[  76.088] rover: 'viator_status' in the container for the detail
 ```
 
 A module reports for itself rather than being guessed at from the log, so this is the rover's own answer, not an inference. The old `Launching <node>` lines are gone: printed at the top of a constructor, they only ever said a node had started constructing.
 
 ## Checking on a running rover
 
-Three ways, all from any terminal, none of which disturb the rover.
+None of these disturb the rover.
 
-### `make status`
+### `viator_status`
 
-What every module says about itself, right now, then it exits:
+What every module says about itself, right now, then it exits. It's a ROS executable
+rather than a make target, so run it inside the container (`make connect`):
+
+```bash title="Terminal (in the container)"
+viator_status
+```
 
 ```text
 module                   state     detail
@@ -122,17 +127,19 @@ The order is deliberate: the modules that move the rover first, telemetry last.
 | `stale` | Stopped reporting for 3s, so it died or hung |
 | `not reporting` | Never checked in at all |
 
-`make status FLAGS=-w` redraws it once a second instead of exiting, for watching a module recover. It doesn't take over the screen, so Ctrl-C leaves the last table in your scrollback.
+`viator_status -w` redraws it once a second instead of exiting, for watching a module recover. It doesn't take over the screen, so Ctrl-C leaves the last table in your scrollback.
 
 <Callout type="idea" title="It's scriptable">
-    `./scripts/status.py` exits non-zero when the rover isn't ready, so it chains:
-    `./scripts/status.py && ./some-test`. The `make` wrapper swallows the code, because a rover
-    that isn't ready shouldn't look like a broken build.
+    It exits non-zero when the rover isn't ready, so it chains: `viator_status && ./some-test`.
 </Callout>
 
-### `make logs`
+### The launch log
 
-Follows `log/launch-latest.log`, so you can read a rover someone else launched, or re-read one that has already stopped. It needs neither ROS nor the container.
+Every launch writes its own `log/launch-<timestamp>.log`, and `log/launch-latest.log` points at the most recent one. The last 20 are kept, because the launch you want to compare against is regularly the one before the one you're looking at. Reading them needs neither ROS nor the container:
+
+```bash title="Terminal"
+tail -f log/launch-latest.log
+```
 
 ### Digging into topics
 
@@ -208,11 +215,16 @@ make launch FLAGS=-B      # skip the workspace build
 
 | Flag | Does |
 | --- | --- |
-| `-B` | Skip `colcon build`. Relaunch without recompiling |
-| `-v` | Stream the build output instead of collapsing it to one line |
-| `-n` | Rebuild the container image with no build cache |
-| `-c` | Force recreate the container |
-| `-s` | Skip the CAN check. The graph will shut down when `can_rmdx8` can't open the bus |
+| `-B`, `--no-build` | Skip `colcon build`. Relaunch without recompiling |
+| `-v`, `--verbose` | Stream the build output instead of collapsing it to one line |
+| `-n`, `--no-cache` | Rebuild the container image with no build cache |
+| `-c`, `--recreate` | Force recreate the container |
+| `-s`, `--skip-can` | Skip the CAN check. The graph will shut down when `can_rmdx8` can't open the bus |
+| `--record` | Record a rosbag into `log/bags/` alongside the launch, minus the camera topics |
+
+`./scripts/launch.py --help` is the authoritative list.
+
+`--record` is worth knowing about before you need it: a rosbag of the run is the difference between debugging a field failure and guessing at it. The camera topics are left out because compressed video would be the whole bag.
 
 `-B` is the one you'll use most: once the workspace is built, `--symlink-install` means Python edits take effect without rebuilding, so relaunching is just the rover coming back up.
 
@@ -224,16 +236,29 @@ make            # list every target
 
 | Command | Does |
 | --- | --- |
+| `make submodules` | Fetch the repository's git submodules. Once per checkout, unless they change |
 | `make launch` | Bring everything up and stream it here |
-| `make status` | What every module says about itself, then exit |
-| `make logs` | Follow the launch output of a rover already running |
 | `make build` | Build the workspace |
 | `make connect` | Get a shell in the dev container |
 | `make can-setup` | Bring the CAN bus up right now, by hand |
 | `make can-sudoers` | Let CAN bringup run without a sudo password. Once per rover |
-| `make sync` | rsync this checkout to the rover (`IP=`, `REMOTE_PATH=`) |
+| `make sync` | rsync this checkout to the rover (`--ip`, `--path`) |
+| `make format` | Format and autofix python |
+| `make lint` | Everything CI checks: ruff, mypy |
 
-`status` and `build` work from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
+`build` works from the rover's host and from inside the container - the ones that need ROS re-run themselves in the right place.
+
+Every target is a thin wrapper over the script of the same name in `scripts/`, so each one takes `--help`:
+
+```bash title="Terminal"
+./scripts/launch.py --help
+```
+
+Flags reach a target through `FLAGS`:
+
+```bash title="Terminal"
+make launch FLAGS="-B -v"
+```
 
 ## Start mission control
 
@@ -267,7 +292,7 @@ Mission control lives in its own repo and runs on **your** machine, not the rove
 </Steps>
 
 <Callout type="success" title="The full chain is live">
-    Mission control's websocket indicator is green and `make status` says every module is `ok`.
+    Mission control's websocket indicator is green and `viator_status` says every module is `ok`.
     Rover hardware through to mission control.
 </Callout>
 
@@ -293,7 +318,7 @@ candump any
     </Accordion>
     <Accordion title="already running as pid N, not starting a second graph">
         A rover is already up, launched from another terminal or left behind by a dropped SSH
-        session. `make status` says how it's doing and `make logs` shows its output. To take it
+        session. `viator_status` says how it's doing and the launch log shows its output. To take it
         down, Ctrl-C the terminal that started it, or run `pkill -INT -f 'ros2 launch
         viator_launch'` inside the container.
     </Accordion>
@@ -308,11 +333,12 @@ candump any
     </Accordion>
     <Accordion title="Mission control's websocket indicator stays red">
         Check the address in mission control's settings matches the rover's current IP, and that
-        `make status` shows `rosbridge` as `ok`. If it doesn't, the graph isn't running.
+        `viator_status` shows `rosbridge` as `ok`. If it doesn't, the graph isn't running.
     </Accordion>
     <Accordion title="A module is degraded or failed">
-        The `detail` column in `make status` is the module's own explanation - it is written by the
-        node that is unhappy, so start there. `make logs` has the surrounding context.
+        The `detail` column in `viator_status` is the module's own explanation - it is written by
+        the node that is unhappy, so start there. `log/launch-latest.log` has the surrounding
+        context.
     </Accordion>
     <Accordion title="A module is stale">
         It published health for a while and then stopped, so it has died or hung. The launch file

@@ -22,21 +22,34 @@ viator/
 │   ├── viator_launch/    # Top-level launch file
 │   └── vision_opencv/    # Git submodule (ros-perception/vision_opencv)
 ├── scripts/              # one per make target, plus _lib.py (see below)
-├── .devcontainer/        # Dockerfile + compose file for the container
+├── .devcontainer/        # Dockerfile + the two compose files
 └── Makefile              # the entry point; `make` lists every target
 ```
 
 `src/` is a standard ROS 2 (`colcon`) workspace. Every package here is `ament_python` except `custom_interfaces`, which is `ament_cmake` (it only generates message/service headers via `rosidl_generate_interfaces`, no compiled node code).
 
+## `.devcontainer/` — the container
+
+The image has three stages. `base` is ROS 2 Humble plus everything the rover needs; `rover` is `base` with nothing added; `dev` adds Ruff, mypy, Node and an ssh client. The rover runs `rover`, so the linters and Node don't get shipped to it.
+
+Dependencies are declared, not hand-installed. Anything a node imports from ROS or apt belongs in that package's `package.xml`, and `rosdep install` reads the manifests at image build time. Python packages that are not ROS packages are installed by the Dockerfile.
+
+There are two compose files, because a laptop and the rover need different things:
+
+| File | Gives |
+| --- | --- |
+| `docker-compose.yml` | The dev container as a laptop runs it. Unprivileged |
+| `docker-compose.rover.yml` | What the Orin adds: the `rover` image, privileged mode and the hardware |
+
+The scripts pick the second one up automatically when they detect an Orin, so there is nothing to pass. `VIATOR_PROFILE=rover` or `=dev` forces the choice, for testing one from the other.
+
 ## `scripts/` — the workflow
 
-Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly. `scripts/_lib.py` holds the shared output helpers, environment checks and the step runner, which is why every script reports in the same format.
+Every `make` target is a thin wrapper over the script of the same name, so anything can also be run directly and every one takes `--help`. `scripts/_lib.py` holds the shared output helpers, the four subprocess wrappers, environment checks and the step runner, which is why every script reports in the same format.
 
 | Script | Purpose |
 | --- | --- |
 | `launch.py` | The whole bringup. On the host: check the host, bring CAN up, build and start the container, build the workspace, then re-run itself inside the container. In the container: start the node graph in the foreground and tee its output to this terminal and to `log/launch-latest.log`. |
-| `status.py` | Prints what every module says about itself, then exits. |
-| `logs.py` | Follows `log/launch-latest.log`, for a rover launched from another terminal. |
 | `build.py` | `colcon build`. |
 | `can.py` | CAN interface bringup and drivebase enable. |
 | `can_sudoers.py` | One-off rover setup: the sudoers rule that lets the bringup run without a password. |
@@ -94,9 +107,9 @@ Neither of these touches hardware, and neither is required for the rover to driv
 | Node | Description |
 | --- | --- |
 | `supervisor` | Subscribes to `/viator/node_status` and prints one readable readiness summary once every module has checked in, then stays quiet until something changes state. |
-| `viator_status` | What `make status` runs, in the `supervisor` package. Not a launched node: it joins the graph, reads the same topic the supervisor does, prints a table and exits. |
+| `viator_status` | In the `supervisor` package. Not a launched node: it joins the graph, reads the same topic the supervisor does, prints a table and exits. `make launch` runs it with `--summary` for its readiness banner. |
 
-Health reporting lives in `lib/status.py`, both halves of it: `StatusReporter` publishes, `StatusWatcher` reads, so the supervisor and `make status` cannot disagree about what counts as ready. Each node constructs a `StatusReporter` once it has finished starting up and publishes `starting`/`ok`/`degraded`/`failed` with a one-line detail, republishing every second so a node that stops reporting can be spotted. That replaces inferring health from log archaeology, which is what the old `Launching <node>` lines amounted to: printed at the top of a constructor, they said nothing about whether the node worked, so they are gone.
+Health reporting lives in `lib/status.py`, both halves of it: `StatusReporter` publishes, `StatusWatcher` reads, so the supervisor and `viator_status` cannot disagree about what counts as ready. Each node constructs a `StatusReporter` once it has finished starting up and publishes `starting`/`ok`/`degraded`/`failed` with a one-line detail, republishing every second so a node that stops reporting can be spotted. That replaces inferring health from log archaeology, which is what the old `Launching <node>` lines amounted to: printed at the top of a constructor, they said nothing about whether the node worked, so they are gone.
 
 ## `custom_interfaces`
 

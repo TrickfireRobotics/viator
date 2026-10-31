@@ -33,11 +33,15 @@ Everything runs in a Docker container so every contributor gets the same ROS 2 H
         container named `viator`.
     </Step>
     <Step>
-        Install the pre-commit hooks, once:
+        The container fetches submodules and does a first build of the workspace on creation. If
+        you aren't using VS Code, or you cloned without `--recurse-submodules`, run this once:
 
         ```bash title="Terminal (in container)"
-        make hooks
+        make submodules && make build
         ```
+
+        The first build is what generates `custom_interfaces`, so editor autocomplete for the
+        rover's messages only works after it has run.
     </Step>
 
 </Steps>
@@ -72,13 +76,19 @@ make
 
 ## Formatting and linting
 
-Python is formatted and linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with [mypy](https://mypy-lang.org/); shell scripts with [shfmt](https://github.com/mvdan/sh).
+Python is formatted and linted with [Ruff](https://docs.astral.sh/ruff/) and type-checked with [mypy](https://mypy-lang.org/).
 
 ```bash title="Terminal"
 make format
 ```
 
-Install the recommended VS Code extensions when prompted and your editor does this on save. The pre-commit hooks from `make hooks` enforce it at commit time either way.
+To check everything CI checks, without changing anything:
+
+```bash title="Terminal"
+make lint
+```
+
+Install the recommended VS Code extensions when prompted and your editor formats on save. CI runs the same Ruff and mypy checks.
 
 ## Where to go next
 
