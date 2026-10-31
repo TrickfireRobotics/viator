@@ -22,11 +22,7 @@
             "source.organizeImports": "explicit"
         }
     },
-    "shfmt.executablePath": "/usr/local/bin/shfmt",
-    "shfmt.executableArgs": ["-i", "4", "-s"],
     "[shellscript]": {
-        "editor.defaultFormatter": "mkhl.shfmt",
-        "editor.formatOnSave": true,
         "editor.detectIndentation": false,
         "editor.insertSpaces": true,
         "editor.tabSize": 4
@@ -34,15 +30,10 @@
 
     /* --------------------------------- python --------------------------------- */
 
-    "python.autoComplete.extraPaths": [
-        "/opt/ros/humble/lib/python3.10/site-packages",
-        "./src",
-        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
-    ],
     "python.analysis.extraPaths": [
         "/opt/ros/humble/lib/python3.10/site-packages",
-        "./src",
-        "/home/trickfire/viator/install/custom_interfaces/local/lib/python3.10/dist-packages"
+        "${workspaceFolder}/src",
+        "${workspaceFolder}/install/custom_interfaces/local/lib/python3.10/dist-packages"
     ],
 
     "python.analysis.diagnosticSeverityOverrides": {
@@ -63,5 +54,5 @@
     /* ----------------------------------- cpp ---------------------------------- */
 
     "cmake.configureOnOpen": false,
-    "cmake.sourceDirectory": "${workspaceFolder}/src/hello_world"
+    "cmake.sourceDirectory": "${workspaceFolder}/src/custom_interfaces"
 }
