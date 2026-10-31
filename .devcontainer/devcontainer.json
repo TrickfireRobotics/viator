@@ -2,6 +2,10 @@
     "dockerComposeFile": "docker-compose.yml",
     "service": "viator",
     "workspaceFolder": "/home/trickfire/viator",
+    // without this a fresh container has no install/, which is where the python
+    // extension is pointed for the generated custom_interfaces messages, so day one
+    // would start with broken autocomplete
+    "postCreateCommand": "make submodules && make build",
     "customizations": {
         "vscode": {
             "extensions": [
@@ -9,11 +13,10 @@
                 "ms-python.vscode-pylance",
                 "ms-python.mypy-type-checker",
                 "charliermarsh.ruff",
-                "mkhl.shfmt",
                 "mads-hartmann.bash-ide-vscode",
-                "esbenp.prettier-vscode",
                 "unifiedjs.vscode-mdx",
-                "ms-vscode.cmake-tools"
+                "ms-vscode.cmake-tools",
+                "tamasfe.even-better-toml"
             ]
         }
     }
