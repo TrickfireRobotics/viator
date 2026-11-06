@@ -22,17 +22,23 @@ sudo modprobe can
 sudo modprobe can_raw
 sudo modprobe mttcan
 
+LEFT_CAN_IF="can0"
+RIGHT_CAN_IF="can1"
+
 # Set up the CAN interface
-sudo ip link set "$IFACE" down
-sudo ip link set "$IFACE" type can bitrate "$BITRATE"
-sudo ip link set "$IFACE" up
+sudo ip link set "$LEFT_CAN_IF" down
+sudo ip link set "$LEFT_CAN_IF" type can bitrate "$BITRATE"
+sudo ip link set "$LEFT_CAN_IF" up
+
+# Set up the CAN interface
+sudo ip link set "$RIGHT_CAN_IF" down
+sudo ip link set "$RIGHT_CAN_IF" type can bitrate "$BITRATE"
+sudo ip link set "$RIGHT_CAN_IF" up
+
 echo "CAN interface $IFACE set up successfully."
 
 TX_BEFORE=$(tx_packets)
 TX_BEFORE=${TX_BEFORE:-0}
-
-LEFT_CAN_IF="can0"
-RIGHT_CAN_IF="can1"
 
 # Motor CAN IDs (hexadecimal)
 LEFT_MOTOR_IDS=("155" "157")
