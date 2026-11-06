@@ -117,12 +117,12 @@ class MotorConfigs:
     """
 
     # Drivebase
-    REAR_RIGHT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=25)
-    MID_RIGHT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=23)
+    REAR_RIGHT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=23)
+    # MID_RIGHT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=23)
     FRONT_RIGHT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=21)
 
-    REAR_LEFT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=26)
-    MID_LEFT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=24)
+    REAR_LEFT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=24)
+    # MID_LEFT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=24)
     FRONT_LEFT_DRIVE_MOTOR = RMDx8MotorConfig(can_id=22)
 
     # Arm

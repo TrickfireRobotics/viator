@@ -29,7 +29,8 @@ class RMDx8MotorManager(Node):
         super().__init__("can_rmdx8_node")
         self.get_logger().info(colorStr("Launching can_rmdx8 node", ColorCodes.BLUE_OK))
         self._id_to_rmdx8_motor: dict[int, RMDx8Motor] = {}
-        self.driver = rmd.CanDriver("can0")
+        self.driver_can0 = rmd.CanDriver("can0")
+        self.driver_can1 = rmd.CanDriver("can1")
         self._driver_lock = Lock()
         self._req_buffer: deque[tuple[int, String]] = deque(maxlen=1000)
         self._buffer_lock = Lock()
@@ -61,10 +62,22 @@ class RMDx8MotorManager(Node):
         """
         Adds new rmdx8 motor to the motor dictionary
         """
+        # Odd motors are on the right, using can1
+        if config.can_id is None:
+            self.get_logger().error("Can id was None, one motor was not added to the system")
+            return
+
+        _driver = None
+        if config.can_id % 2 == 1:
+            _driver = self.driver_can1
+
+        if _driver is None:
+            self.get_logger().error("Driver was None, one motor was not added to the system")
+            return
 
         motor = RMDx8Motor(
             config,
-            self.driver,
+            _driver,
             self,
             lambda: self._createRequest(config.can_id, String(data=self._UPDATE_STATE)),
             self._driver_lock,

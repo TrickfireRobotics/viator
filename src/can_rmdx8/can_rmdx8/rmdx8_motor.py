@@ -117,9 +117,11 @@ class RMDx8Motor:
                     # Velocity is 0.01 dps
                     self.motor.sendVelocitySetpoint(run_settings.velocity * DEGREE_TO_REV * 100)
 
-                if _checkValid(run_settings.current):
-                    # Value is 0.01 A
-                    self.motor.sendCurrentSetpoint(run_settings.current * 100)
+                # Legacy code do not uncomment
+                #                if _checkValid(run_settings.current):
+                #                    # Value is 0.01 A
+                #                    self.motor.sendCurrentSetpoint(run_settings.current * 100)
+                #
 
                 # Acceleration and type must both be set
                 if _checkValid(run_settings.acceleration) != (
@@ -170,6 +172,10 @@ class RMDx8Motor:
                 if self._poll_count % 5 == 0:
                     self._last_power = self.motor.getMotorPower()
                     self._last_acceleration = self.motor.getAcceleration()
+
+                if self.config.can_id is None:
+                    return
+
                 state = RMDX8MotorState.fromRMDX8Data(
                     self.config.can_id,
                     self.motor.getMotorStatus1(),

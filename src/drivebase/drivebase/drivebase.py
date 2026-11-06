@@ -28,13 +28,13 @@ class Drivebase(Node):
     def moveLeftSide(self, msg: Float32) -> None:
         vel = msg.data * self.SPEED
         self.bot_interface.runMotorSpeed(MotorConfigs.FRONT_LEFT_DRIVE_MOTOR, vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.MID_LEFT_DRIVE_MOTOR, vel)
+        # self.bot_interface.runMotorSpeed(MotorConfigs.MID_LEFT_DRIVE_MOTOR, vel)
         self.bot_interface.runMotorSpeed(MotorConfigs.REAR_LEFT_DRIVE_MOTOR, vel)
 
     def moveRightSide(self, msg: Float32) -> None:
         vel = msg.data * self.SPEED
         self.bot_interface.runMotorSpeed(MotorConfigs.FRONT_RIGHT_DRIVE_MOTOR, -vel)
-        self.bot_interface.runMotorSpeed(MotorConfigs.MID_RIGHT_DRIVE_MOTOR, -vel)
+        # self.bot_interface.runMotorSpeed(MotorConfigs.MID_RIGHT_DRIVE_MOTOR, -vel)
         self.bot_interface.runMotorSpeed(MotorConfigs.REAR_RIGHT_DRIVE_MOTOR, -vel)
 
     def turnLeft(self, msg: Float32) -> None:
