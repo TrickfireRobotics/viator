@@ -73,10 +73,6 @@ class RMDx8MotorManager(Node):
         else:
             _driver = self.driver_can0
 
-        if _driver is None:
-            self.get_logger().error("Driver was None, one motor was not added to the system")
-            return
-
         motor = RMDx8Motor(
             config,
             _driver,
